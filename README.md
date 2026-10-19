@@ -65,7 +65,7 @@ The bot checks its connection to Telegram every 60 seconds. If Telegram has been
 - **Douyin** requires cookies: set `COOKIES_FROM_BROWSER=chrome` (on a machine with Chrome) or export a `cookies.txt` (Netscape format) and set `COOKIES_FILE`. Private Facebook/TikTok videos need cookies too.
 - **Instagram, Reddit, YouTube** often block server IPs (Render, VPS). If downloads fail there with a login or "not a bot" error, add cookies the same way.
 - **Threads** has no yt-dlp extractor: the bot reads the post from the page Threads serves to search crawlers. If Threads changes that page, Threads links stop working until the code is updated.
-- The link's shape decides the first step: Instagram `/reel/`, Facebook `/videos/` or TikTok `/video/` are fetched as videos, Facebook `/photo/` or TikTok `/photo/` as photo posts, and ambiguous links (Instagram `/p/`, Facebook `/posts/`, Reddit) are tried as video first, then as text/photo posts. X and Threads posts are read whole from their APIs.
+- The link's shape decides the first step: Instagram `/reel/`, Facebook `/videos/` or TikTok `/video/` are fetched as videos, Facebook `/photo/` or TikTok `/photo/` as photo posts, and ambiguous links (Instagram `/p/`, Facebook `/posts/`, Reddit) are tried as video first, then as text/photo posts. X, Threads and Facebook posts (except video links) are read whole first: Facebook serves a browser-like request the full post data without a login.
 - Albums hold up to 10 items. Instagram `/p/` carousels only send their first video, since yt-dlp doesn't return their photos.
 - **TikTok**: when yt-dlp fails (sensitive or age-restricted posts, some geo-blocked videos) the bot falls back to the public [tikwm](https://www.tikwm.com) API, which needs no login and also handles photo slideshows. Links are then sent to that third-party service. Some videos are still unavailable from the server's country.
 - **Translation**: captions, post text and article titles that aren't in Vietnamese are translated, with the original kept in a collapsed quote. It uses Google Translate's free, unofficial endpoint (no key), so it may stop working without notice; the bot then just shows the original. Set `TRANSLATE_TO` to another language code, or leave it empty to turn translation off. Full article pages are not translated.
@@ -88,6 +88,7 @@ src/tele_view/
   threads.py    Threads posts (video, photos, text)
   tiktok.py     TikTok fallback via tikwm (restricted posts, slideshows)
   translate.py  translation via Google Translate's free endpoint
+  facebook.py   Facebook posts: full text, photos, videos (page data, no login)
   post.py       Post model: text, photos and videos in order
   preview.py    Facebook/Instagram/Reddit text and photo posts (Open Graph tags)
   cache.py      SQLite cache

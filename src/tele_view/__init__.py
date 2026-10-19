@@ -23,7 +23,7 @@ from aiogram.types import (
     ReplyParameters,
 )
 
-from . import article, preview, threads, tiktok, tweet, video
+from . import article, facebook, preview, threads, tiktok, tweet, video
 from .cache import Cache
 from .config import Config, load_config
 from .health import Health
@@ -47,6 +47,8 @@ MESSAGE_LIMIT = 4096
 # longer bodies go in a collapsed quote so a long caption doesn't flood the chat
 COLLAPSE_CHARS = 200
 COLLAPSE_LINES = 4
+
+UNREADABLE_POST = "Không đọc được bài này (riêng tư, đã bị xoá, hoặc nền tảng đang chặn bot)."
 
 # platforms whose text and photo posts are shown from their link preview tags
 PREVIEW_PLATFORMS = ("facebook", "instagram", "reddit")
@@ -189,43 +191,53 @@ class TeleView:
             await self.send_video(message, url, label)
             return
 
-        # X and Threads have an API listing everything a post holds, so ask it first
-        if kind in ("x", "threads"):
-            post = await (tweet.fetch(url) if kind == "x" else threads.fetch(url))
+        expect = expected_media(kind, url)
+        # X, Threads and Facebook pages list everything a post holds, so read the post first unless the link
+        # is plainly a video; photo links have nothing for yt-dlp either
+        post_first = kind in ("x", "threads") or (kind == "facebook" and expect != "video") or expect == "photo"
+        if post_first:
+            post = await self.fetch_post(kind, url)
             if post is not None:
                 await self.send_post(message, url, label, post)
-            elif kind == "x":
-                # FxTwitter down: yt-dlp can still fetch the video
-                await self.send_video(message, url, label)
-            else:
-                raise video.VideoError("Bài riêng tư, đã bị xoá, hoặc Threads đang chặn bot.")
-            return
-
-        expect = expected_media(kind, url)
-        if expect == "photo":
-            post = await self.fetch_post(kind, url)
-            if post is None:
-                raise video.VideoError("Không đọc được bài này (riêng tư hoặc đã bị xoá).")
-            await self.send_post(message, url, label, post)
-            return
+                return
+            if kind == "threads" or expect == "photo":
+                raise video.VideoError(UNREADABLE_POST)
+            # X with FxTwitter down, or a Facebook page that wouldn't load: yt-dlp may still get the video
 
         try:
             await self.send_video(message, url, label)
         except video.VideoError as e:
+            if post_first:
+                # the post couldn't be read either, so "no video" would mislead: it's missing or private
+                if e.no_video:
+                    raise video.VideoError(UNREADABLE_POST) from e
+                raise
             # TikTok: tikwm reads sensitive, age-restricted and some geo-blocked posts without a login.
-            # Facebook, Instagram, Reddit: the post is text or photos, or its video needs a login (Facebook
-            # answers logged-out requests with 404). The preview still has the text when the post exists
+            # Instagram, Reddit, Facebook video links: the post may be text or photos, or its video may need a login
             post = await self.fetch_post(kind, url)
             if post is None:
                 raise
             log.info("no video from yt-dlp for %s (%s), sending the post instead", url, e)
-            if not post.videos and not e.no_video:
-                post.note = f"🎬 Bài có video nhưng không tải được: {e}"
+            # only a video link proves there was a video; other posts may simply have none
+            if expect == "video" and not post.videos:
+                post.note = f"🎬 Không tải được video: {e}"
             await self.send_post(message, url, label, post)
 
     async def fetch_post(self, kind: str, url: str) -> Post | None:
+        if kind == "x":
+            return await tweet.fetch(url)
+        if kind == "threads":
+            return await threads.fetch(url)
         if kind == "tiktok":
             return await tiktok.fetch(url)
+        if kind == "facebook":
+            post = await facebook.fetch(url)
+            if post is None:
+                return await preview.fetch(url)
+            if not post.media and (og := await preview.fetch(url)):
+                # a photo the page data didn't expose, or a shared link's image
+                post.media = og.media
+            return post
         if kind in PREVIEW_PLATFORMS:
             return await preview.fetch(url)
         return None

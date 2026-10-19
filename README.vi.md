@@ -65,7 +65,7 @@ Cứ 60 giây bot gọi thử Telegram một lần. Nếu mất kết nối quá
 - **Douyin** bắt buộc có cookie: đặt `COOKIES_FROM_BROWSER=chrome` (khi chạy trên máy có Chrome) hoặc xuất `cookies.txt` (định dạng Netscape) rồi đặt `COOKIES_FILE`. Facebook/TikTok riêng tư cũng cần cookie.
 - **Instagram, Reddit, YouTube** hay chặn IP máy chủ (Render, VPS). Nếu trên server bị lỗi đòi đăng nhập hoặc "not a bot", thêm cookie theo cách trên.
 - **Threads** không có extractor trong yt-dlp: bot đọc bài từ trang mà Threads trả cho bot tìm kiếm. Nếu Threads đổi trang đó, link Threads sẽ ngừng chạy cho tới khi sửa code.
-- Bot nhìn dạng link để chọn cách lấy: Instagram `/reel/`, Facebook `/videos/`, TikTok `/video/` lấy như video; Facebook `/photo/`, TikTok `/photo/` lấy như bài ảnh; link chưa rõ (Instagram `/p/`, Facebook `/posts/`, Reddit) thử video trước, không có thì lấy chữ và ảnh. Bài X và Threads đọc nguyên bài từ API.
+- Bot nhìn dạng link để chọn cách lấy: Instagram `/reel/`, Facebook `/videos/`, TikTok `/video/` lấy như video; Facebook `/photo/`, TikTok `/photo/` lấy như bài ảnh; link chưa rõ (Instagram `/p/`, Facebook `/posts/`, Reddit) thử video trước, không có thì lấy chữ và ảnh. Bài X, Threads và Facebook (trừ link video) được đọc nguyên bài trước: Facebook trả đầy đủ dữ liệu bài cho request giống trình duyệt mà không cần đăng nhập.
 - Album tối đa 10 mục. Carousel Instagram `/p/` chỉ gửi video đầu tiên, vì yt-dlp không trả về ảnh của nó.
 - **TikTok**: khi yt-dlp lỗi (bài nhạy cảm, giới hạn độ tuổi, một số video bị chặn khu vực), bot chuyển sang API công khai [tikwm](https://www.tikwm.com). Cách này không cần đăng nhập và lấy được cả bài ảnh slideshow, nhưng link sẽ được gửi qua dịch vụ bên thứ ba đó. Một số video vẫn không xem được từ nước đặt máy chủ.
 - **Dịch**: caption, nội dung bài và tiêu đề bài báo không phải tiếng Việt sẽ được dịch, bản gốc giữ trong khung thu gọn. Bot dùng endpoint miễn phí, không chính thức của Google Translate (không cần key), nên có thể ngừng chạy bất cứ lúc nào; khi đó bot chỉ hiện bản gốc. Đặt `TRANSLATE_TO` thành mã ngôn ngữ khác, hoặc để trống để tắt dịch. Nội dung đầy đủ trong trang bài báo không được dịch.
@@ -88,6 +88,7 @@ src/tele_view/
   threads.py    bài Threads (video, ảnh, chữ)
   tiktok.py     TikTok dự phòng qua tikwm (bài bị giới hạn, slideshow)
   translate.py  dịch qua endpoint miễn phí của Google Translate
+  facebook.py   bài Facebook: chữ đầy đủ, ảnh, video (dữ liệu trang, không cần đăng nhập)
   post.py       mô hình bài: chữ, ảnh và video theo thứ tự
   preview.py    bài chữ/ảnh Facebook, Instagram, Reddit (thẻ Open Graph)
   cache.py      cache SQLite
