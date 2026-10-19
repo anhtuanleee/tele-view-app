@@ -1,48 +1,82 @@
 # TeleView
 
-Bot Telegram giúp xem nội dung link ngay trong chat:
+**English** | [Tiếng Việt](README.vi.md)
 
-| Link | Bot làm gì |
+A Telegram bot that lets you view linked content right inside the chat:
+
+| Link | What the bot does |
 |---|---|
-| TikTok, Facebook, X, Douyin | Tải video về rồi gửi lại, xem luôn trong chat. Tweet không có video thì gửi chữ và ảnh |
-| Trang báo / bài viết | Trích nội dung thành trang Telegraph, có nút **⚡ Instant View** |
-| Bài báo có video | Gửi thêm video (video nhúng YouTube/Vimeo thì gửi link để Telegram tự hiện player) |
-| YouTube, Vimeo | Bỏ qua, vì Telegram đã tự hiện player |
+| TikTok, Facebook, X, Douyin | Downloads the video and sends it back so it plays in the chat. Tweets without video are sent as text and photos |
+| News sites / articles | Extracts the article into a Telegraph page with an **⚡ Instant View** button |
+| Articles with a video | Also sends the video (YouTube/Vimeo embeds are sent as a link so Telegram shows its own player) |
+| YouTube, Vimeo | Skipped, since Telegram already shows a player |
 
-## Chạy
+## Running
 
-1. Tạo bot với [@BotFather](https://t.me/BotFather), lấy token.
-2. **Dùng trong group**: tắt privacy mode (`/setprivacy` → *Disable*) hoặc cho bot làm admin, nếu không bot sẽ không thấy tin nhắn.
-3. Cấu hình rồi chạy:
+1. Create a bot with [@BotFather](https://t.me/BotFather) and copy its token.
+2. **For groups**: turn off privacy mode (`/setprivacy` → *Disable*) or make the bot an admin, otherwise it can't see messages.
+3. Configure and run:
 
 ```bash
-cp .env.example .env   # điền BOT_TOKEN
+cp .env.example .env   # fill in BOT_TOKEN
 uv run tele-view
 ```
 
-Máy cần có `ffmpeg`. Hoặc chạy bằng Docker: `docker compose up -d --build`.
+Requires `ffmpeg`. Or run with Docker: `docker compose up -d --build`.
 
-**Đưa lên VPS** (Ubuntu, có SSH): `./deploy.sh root@IP_VPS`. Script tự cài Docker, copy code và `.env` lên, rồi build và chạy. Sửa code xong thì chạy lại đúng lệnh này. Nhớ tắt bot trên máy local trước, vì hai nơi dùng chung token sẽ báo lỗi `Conflict`.
+## Deploying
 
-## Giới hạn và cách nâng
+### VPS
 
-- **Video tối đa 50MB** khi dùng Bot API thường. Video lớn hơn sẽ tự nén xuống 720p. Video quá dài vẫn không vừa thì bot báo lỗi.
-  Muốn gửi tới **2GB**: lấy `api_id`/`api_hash` ở <https://my.telegram.org>, thêm `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `BOT_API_URL=http://telegram-bot-api:8081` vào `.env`, rồi chạy `docker compose --profile local up -d --build`.
-- **Douyin** bắt buộc có cookie: đặt `COOKIES_FROM_BROWSER=chrome` (khi chạy trên máy có Chrome) hoặc xuất `cookies.txt` (định dạng Netscape) rồi đặt `COOKIES_FILE`. Facebook/TikTok riêng tư cũng cần cookie.
-- Các nền tảng hay đổi cơ chế chống tải. Khi bị lỗi thì cập nhật yt-dlp trước: `uv lock --upgrade-package yt-dlp && uv sync`.
-- Trang cần JavaScript mới hiện nội dung, hoặc có paywall, thì không trích được bài.
-- Ảnh trong trang Telegraph được lấy trực tiếp từ link gốc. Trang gốc chặn hotlink thì ảnh có thể không hiện.
-- Kết quả được cache 30 ngày theo URL (`data/cache.sqlite3`), nên gửi lại cùng link sẽ có kết quả ngay.
+You need an Ubuntu VPS with SSH access. Run `./deploy.sh root@VPS_IP`. The script installs Docker if needed, uploads the code and `.env`, then builds and starts the bot. Run the same command again after changing the code.
 
-## Cấu trúc
+Stop the bot on your local machine first: two instances using the same token fail with `Conflict`.
+
+### Render (free)
+
+1. Create a *Web Service* from the GitHub repo: Language **Docker**, Instance Type **Free**, Health Check Path **`/health`**.
+2. Add the `BOT_TOKEN` environment variable. Also recommended: `MAX_JOBS=1`, since the free tier has little RAM, and `TELEGRAPH_TOKEN`, so the bot doesn't create a new Telegraph account on every start. You'll find that token in `data/telegraph_token` after running the bot locally once.
+3. Free services sleep after 15 minutes without requests. Use [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com) to ping `https://<service-name>.onrender.com/health` every 5–10 minutes.
+
+The free tier has no persistent disk, so the cache is lost on every restart. Videos already sent stay on Telegram; resending an old link just makes the bot download it again.
+
+### Health check
+
+When `PORT` is set (Render sets it automatically), the bot serves `/health`:
+
+```json
+{
+  "status": "ok",
+  "bot": "@your_bot",
+  "version": "0.1.0",
+  "uptime_s": 3600,
+  "telegram": { "ok": true, "last_ok_s_ago": 12, "error": null },
+  "jobs": { "processing": 0, "max_concurrent": 2, "succeeded": 42, "failed": 1 }
+}
+```
+
+The bot checks its connection to Telegram every 60 seconds. If Telegram has been unreachable for more than 5 minutes, or the token was revoked, the endpoint returns `503` so Render restarts the service.
+
+## Limits and how to raise them
+
+- **Videos up to 50MB** with the regular Bot API. Larger videos are compressed to 720p automatically. Videos that are too long to fit even after compressing (roughly over 25 minutes) fail with an error.
+  To send up to **2GB**: get an `api_id`/`api_hash` at <https://my.telegram.org>, add `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` and `BOT_API_URL=http://telegram-bot-api:8081` to `.env`, then run `docker compose --profile local up -d --build`.
+- **Douyin** requires cookies: set `COOKIES_FROM_BROWSER=chrome` (on a machine with Chrome) or export a `cookies.txt` (Netscape format) and set `COOKIES_FILE`. Private Facebook/TikTok videos need cookies too.
+- Platforms change their anti-download measures often. When downloads break, update yt-dlp first: `uv lock --upgrade-package yt-dlp && uv sync`.
+- Pages that need JavaScript to show their content, or are behind a paywall, can't be extracted.
+- Images on Telegraph pages are loaded straight from the original site. If that site blocks hotlinking, images may not show.
+- Results are cached for 30 days per URL (`data/cache.sqlite3`), so sending the same link again is instant.
+
+## Structure
 
 ```
 src/tele_view/
-  __init__.py   bot: nhận link, điều phối, gửi kết quả
-  links.py      tách link khỏi tin nhắn, phân loại nền tảng
-  video.py      yt-dlp tải video + ffmpeg chuyển/nén cho Telegram
-  article.py    trích bài (trafilatura) → node Telegraph
-  telegraph.py  API Telegraph
-  tweet.py      tweet không có video (qua FxTwitter)
-  cache.py      cache SQLite
+  __init__.py   bot: receives links, dispatches, sends results
+  links.py      extracts links from messages, classifies the platform
+  video.py      yt-dlp download + ffmpeg conversion/compression for Telegram
+  article.py    article extraction (trafilatura) → Telegraph nodes
+  telegraph.py  Telegraph API
+  tweet.py      tweets without video (via FxTwitter)
+  cache.py      SQLite cache
+  health.py     /health endpoint (enabled when PORT is set)
 ```
