@@ -17,8 +17,11 @@ class VideoError(Exception):
 
 # yt-dlp error text → reason shown to users, first match wins
 REASONS = [
-    (("ip address is blocked", "not available in your country", "geo restrict", "geo-restrict"),
-     "Video bị giới hạn theo khu vực, hoặc nền tảng đang chặn máy chủ của bot."),
+    # TikTok answers removed and geo-blocked posts with the same status, which yt-dlp reports as an IP block
+    (("ip address is blocked",),
+     "Video đã bị xoá, bị giới hạn khu vực, hoặc nền tảng đang chặn máy chủ của bot."),
+    (("available in your country", "geo restrict", "geo-restrict"),
+     "Video bị giới hạn theo khu vực, không xem được từ máy chủ của bot."),
     (("private", "permission to view", "login", "log in", "sign in", "cookies", "not a bot",
       "comfortable for some audiences", "age-restricted", "age restricted", "inappropriate"),
      "Video riêng tư, giới hạn độ tuổi, hoặc nền tảng yêu cầu đăng nhập."),
