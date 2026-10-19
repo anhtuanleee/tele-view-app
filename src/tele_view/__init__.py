@@ -1,0 +1,209 @@
+import asyncio
+import json
+import logging
+import re
+import tempfile
+from html import escape
+from pathlib import Path
+
+from aiogram import Bot, Dispatcher, F
+from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
+from aiogram.enums import ChatAction, ParseMode
+from aiogram.filters import CommandStart
+from aiogram.types import FSInputFile, InputMediaPhoto, LinkPreviewOptions, Message, ReplyParameters
+
+from . import article, tweet, video
+from .cache import Cache
+from .config import Config, load_config
+from .links import PLATFORM_LABELS, classify, extract_urls
+from .telegraph import Telegraph, TelegraphError
+
+log = logging.getLogger("tele_view")
+
+HELP = (
+    "👋 Thêm tao vào group hoặc gửi link trực tiếp.\n\n"
+    "• <b>TikTok, Facebook, X, Douyin</b>: tao tải video về và gửi lại để xem ngay trong chat.\n"
+    "• <b>Trang báo / bài viết</b>: tao chuyển thành trang có nút ⚡ Instant View.\n"
+    "• YouTube, Vimeo: Telegram đã tự hiện player nên tao bỏ qua."
+)
+
+CAPTION_LIMIT = 1024
+
+YOUTUBE_EMBED_RE = re.compile(r"youtube(?:-nocookie)?\.com/embed/([\w-]{11})")
+
+
+def _trim(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def _video_caption(v: video.Video, url: str, label: str) -> str:
+    source = f'🔗 <a href="{escape(url)}">{escape(label)}</a>'
+    if v.uploader:
+        source += f" · {escape(v.uploader)}"
+    body = v.description or v.title
+    # TikTok/Douyin titles are usually the description cut short
+    if v.title and v.description and not v.description.startswith(v.title[:30]):
+        body = f"{v.title}\n{v.description}"
+    room = CAPTION_LIMIT - len(source) - 2
+    return f"{escape(_trim(body, room))}\n\n{source}" if body else source
+
+
+class TeleView:
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self.cache = Cache(cfg.data_dir / "cache.sqlite3")
+        self.telegraph = Telegraph(cfg.telegraph_token, cfg.data_dir / "telegraph_token")
+        self.jobs = asyncio.Semaphore(cfg.max_jobs)
+
+    async def handle(self, message: Message) -> None:
+        if self.cfg.allowed_chat_ids and message.chat.id not in self.cfg.allowed_chat_ids:
+            return
+        for url in extract_urls(message):
+            kind = classify(url)
+            if kind is None:
+                continue
+            try:
+                if kind == "article":
+                    await self.send_article(message, url)
+                else:
+                    await self.send_video(message, url, PLATFORM_LABELS[kind], is_x=kind == "x")
+            except Exception as e:
+                log.exception("failed on %s", url)
+                await message.reply(f"⚠️ {escape(_trim(str(e), 300))}", disable_notification=True)
+
+    async def send_video(
+        self, message: Message, url: str, label: str, is_x: bool = False, cache_key: str | None = None
+    ) -> None:
+        reply = ReplyParameters(message_id=message.message_id, allow_sending_without_reply=True)
+        cache_key = cache_key or url
+        cached = self.cache.get(cache_key)
+        if cached and cached[0] == "video":
+            await message.answer_video(cached[1], caption=cached[2], reply_parameters=reply, supports_streaming=True)
+            return
+
+        async with self.jobs:
+            await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
+            with tempfile.TemporaryDirectory(dir=self.cfg.data_dir) as tmp:
+                try:
+                    v = await asyncio.to_thread(video.download, url, self.cfg, Path(tmp))
+                except video.VideoError:
+                    # X posts without video: show the text and photos instead
+                    if is_x and await self.send_tweet(message, url):
+                        return
+                    raise
+                caption = _video_caption(v, url, label)
+                sent = await message.answer_video(
+                    FSInputFile(v.path),
+                    caption=caption,
+                    duration=v.duration or None,
+                    width=v.width,
+                    height=v.height,
+                    supports_streaming=True,
+                    reply_parameters=reply,
+                )
+        if sent.video:
+            self.cache.put(cache_key, "video", sent.video.file_id, caption)
+
+    async def send_tweet(self, message: Message, url: str) -> bool:
+        t = await tweet.fetch(url)
+        if t is None:
+            return False
+        reply = ReplyParameters(message_id=message.message_id, allow_sending_without_reply=True)
+        text = f"<b>{escape(t.author)}</b> @{escape(t.handle)}\n{escape(t.text)}\n\n🔗 <a href=\"{escape(url)}\">X</a>"
+        if not t.photos:
+            await message.answer(text, reply_parameters=reply, link_preview_options=LinkPreviewOptions(is_disabled=True))
+        elif len(text) <= CAPTION_LIMIT:
+            media = [InputMediaPhoto(media=p) for p in t.photos[:10]]
+            media[0].caption = text
+            await message.answer_media_group(media, reply_parameters=reply)
+        else:
+            await message.answer_media_group([InputMediaPhoto(media=p) for p in t.photos[:10]], reply_parameters=reply)
+            await message.answer(text, link_preview_options=LinkPreviewOptions(is_disabled=True))
+        return True
+
+    async def send_article(self, message: Message, url: str) -> None:
+        cached = self.cache.get(url)
+        if cached and cached[0] == "article":
+            page_url, meta = cached[1], json.loads(cached[2])
+        else:
+            await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
+            a = await article.fetch(url)
+            try:
+                page_url = await self.telegraph.create_page(a.title, a.nodes, a.author or a.site, a.url)
+            except TelegraphError as e:
+                raise RuntimeError(f"Telegraph từ chối bài: {e}") from e
+            meta = {"title": a.title, "site": a.site, "has_video": a.has_video}
+            self.cache.put(url, "article", page_url, json.dumps(meta, ensure_ascii=False))
+
+        text = f"📰 <b>{escape(meta['title'])}</b>"
+        if meta["site"]:
+            text += f"\n{escape(meta['site'])}"
+        text += f'\n\n<a href="{page_url}">⚡ Đọc ngay trong Telegram</a>'
+        await message.reply(
+            text,
+            link_preview_options=LinkPreviewOptions(url=page_url, prefer_large_media=True),
+            disable_notification=True,
+        )
+
+        if meta.get("has_video"):
+            try:
+                await self.send_article_video(message, url, meta["site"])
+            except Exception as e:
+                # the article itself was delivered; a missing video isn't worth an error message
+                log.info("no video sent for article %s: %s", url, e)
+
+    async def send_article_video(self, message: Message, url: str, site: str) -> None:
+        embed = await asyncio.to_thread(video.find_embed, url, self.cfg)
+        if embed:
+            if m := YOUTUBE_EMBED_RE.search(embed):
+                embed = f"https://www.youtube.com/watch?v={m.group(1)}"
+            kind = classify(embed)
+            if kind is None:
+                # YouTube/Vimeo: Telegram's own link preview plays it inline
+                await message.reply(
+                    f'🎬 <a href="{escape(embed)}">Video trong bài</a>',
+                    link_preview_options=LinkPreviewOptions(url=embed, prefer_large_media=True),
+                    disable_notification=True,
+                )
+                return
+            if kind != "article":
+                await self.send_video(message, embed, PLATFORM_LABELS[kind], is_x=kind == "x")
+                return
+        await self.send_video(message, url, f"Video trong bài · {site or 'nguồn'}", cache_key=f"video:{url}")
+
+
+def _make_bot(cfg: Config) -> Bot:
+    # long timeout: uploading a large video can take minutes
+    session = AiohttpSession(timeout=600)
+    if cfg.bot_api_url:
+        session = AiohttpSession(api=TelegramAPIServer.from_base(cfg.bot_api_url, is_local=True), timeout=600)
+    return Bot(cfg.bot_token, session=session, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+
+
+async def run() -> None:
+    cfg = load_config()
+    app = TeleView(cfg)
+    bot = _make_bot(cfg)
+    dp = Dispatcher()
+
+    @dp.message(CommandStart())
+    async def start(message: Message) -> None:
+        await message.answer(HELP)
+
+    @dp.message(F.text | F.caption)
+    async def on_message(message: Message) -> None:
+        await app.handle(message)
+
+    me = await bot.get_me()
+    log.info("running as @%s (upload limit %dMB)", me.username, cfg.max_upload_bytes // 1024 // 1024)
+    try:
+        await dp.start_polling(bot, allowed_updates=["message"])
+    finally:
+        await app.telegraph.close()
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    asyncio.run(run())

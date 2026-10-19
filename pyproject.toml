@@ -1,0 +1,22 @@
+[project]
+name = "tele-view"
+version = "0.1.0"
+description = "Telegram bot: xem video TikTok/Facebook/X/Douyin và bài báo ngay trong chat"
+authors = [
+    { name = "anhtuanlee", email = "anhtuan.freelc@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "aiogram>=3.31.0",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.2.4",
+    "trafilatura>=2.3.1",
+    "yt-dlp>=2026.8.19",
+]
+
+[project.scripts]
+tele-view = "tele_view:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
