@@ -32,7 +32,7 @@ VIDEO_HINT_RE = re.compile(r"<video|\.m3u8|og:video|youtube(?:-nocookie)?\.com/e
 
 
 class ArticleError(Exception):
-    pass
+    """A failure whose message is safe to show users as is."""
 
 
 @dataclass
@@ -130,10 +130,17 @@ async def fetch(url: str) -> Article:
         try:
             resp = await client.get(url)
             resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            code = e.response.status_code
+            if code in (401, 403, 429):
+                raise ArticleError("Trang này chặn bot đọc nội dung.") from e
+            if code in (404, 410):
+                raise ArticleError("Trang không tồn tại hoặc đã bị xoá.") from e
+            raise ArticleError(f"Trang trả về lỗi {code}. Thử lại sau.") from e
         except httpx.HTTPError as e:
-            raise ArticleError(f"Không mở được trang: {e}") from e
+            raise ArticleError("Không mở được trang. Thử lại sau.") from e
     if "html" not in resp.headers.get("content-type", "html"):
-        raise ArticleError("Link không phải trang web")
+        raise ArticleError("Link không phải trang web.")
 
     final_url = str(resp.url)
     html = resp.text
@@ -142,7 +149,7 @@ async def fetch(url: str) -> Article:
         include_links=True, include_formatting=True, favor_recall=True,
     )
     if not body:
-        raise ArticleError("Không trích được nội dung bài (có thể trang cần JS hoặc đăng nhập)")
+        raise ArticleError("Không đọc được nội dung bài (trang cần đăng nhập, có paywall, hoặc cần JavaScript).")
     meta = trafilatura.extract_metadata(html, default_url=final_url)
 
     nodes = html_to_nodes(body, final_url)

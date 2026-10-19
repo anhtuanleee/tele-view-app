@@ -1,4 +1,5 @@
 import json
+import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,9 +8,39 @@ import yt_dlp
 
 from .config import Config
 
+log = logging.getLogger(__name__)
+
 
 class VideoError(Exception):
-    pass
+    """A failure whose message is safe to show users as is."""
+
+
+# yt-dlp error text → reason shown to users, first match wins
+REASONS = [
+    (("ip address is blocked", "not available in your country", "geo restrict", "geo-restrict"),
+     "Video bị giới hạn theo khu vực, hoặc nền tảng đang chặn máy chủ của bot."),
+    (("private", "permission to view", "login", "log in", "sign in", "cookies", "not a bot",
+      "comfortable for some audiences", "age-restricted", "age restricted", "inappropriate"),
+     "Video riêng tư, giới hạn độ tuổi, hoặc nền tảng yêu cầu đăng nhập."),
+    (("no video formats", "no video could be found", "there's no video", "no video in this post"),
+     "Bài này không có video."),
+    (("unsupported url",),
+     "Link này không có video hoặc chưa được hỗ trợ."),
+    (("http error 429", "too many requests", "rate-limit", "rate limit", "http error 403"),
+     "Nền tảng đang tạm chặn bot. Thử lại sau ít phút."),
+    (("removed", "deleted", "not available", "unavailable", "does not exist", "http error 404", "status code"),
+     "Video đã bị xoá hoặc không còn tồn tại."),
+    (("timed out", "timeout", "connection", "network", "temporary failure"),
+     "Không kết nối được tới nền tảng. Thử lại sau."),
+]
+
+
+def _explain(error: str) -> str:
+    lowered = error.lower()
+    for needles, reason in REASONS:
+        if any(n in lowered for n in needles):
+            return reason
+    return "Không tải được video từ link này."
 
 
 @dataclass
@@ -56,7 +87,8 @@ def _probe(path: Path) -> dict:
 def _ffmpeg(args: list[str]) -> None:
     proc = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", *args], capture_output=True, text=True)
     if proc.returncode != 0:
-        raise VideoError(f"ffmpeg lỗi: {proc.stderr.strip()[-300:]}")
+        log.warning("ffmpeg failed: %s", proc.stderr.strip()[-500:])
+        raise VideoError("Không xử lý được file video này.")
 
 
 def _make_telegram_friendly(src: Path, max_bytes: int) -> Path:
@@ -64,7 +96,8 @@ def _make_telegram_friendly(src: Path, max_bytes: int) -> Path:
     info = _probe(src)
     vstream = next((s for s in info["streams"] if s.get("codec_type") == "video"), None)
     if vstream is None:
-        raise VideoError("Link không có video")
+        # e.g. TikTok photo slideshows, which yt-dlp returns as audio only
+        raise VideoError("Bài này không có video (có thể là bài ảnh).")
     duration = float(info["format"].get("duration") or 0)
     size = src.stat().st_size
     dst = src.with_name(src.stem + ".tg.mp4")
@@ -74,11 +107,11 @@ def _make_telegram_friendly(src: Path, max_bytes: int) -> Path:
         return dst
 
     if duration <= 0:
-        raise VideoError("Không xác định được thời lượng video để nén")
+        raise VideoError("Không xử lý được file video này.")
     audio_kbps = 96
     video_kbps = int(max_bytes * 8 * 0.9 / duration / 1000) - audio_kbps
     if video_kbps < 150:
-        raise VideoError(f"Video quá dài ({int(duration // 60)} phút) để nén dưới giới hạn upload")
+        raise VideoError(f"Video quá dài ({int(duration // 60)} phút), Telegram chỉ nhận video bot gửi tới 50MB.")
     video_kbps = min(video_kbps, 2500)
     _ffmpeg([
         "-i", str(src),
@@ -89,7 +122,7 @@ def _make_telegram_friendly(src: Path, max_bytes: int) -> Path:
         "-movflags", "+faststart", str(dst),
     ])
     if dst.stat().st_size > max_bytes:
-        raise VideoError("Video vẫn vượt giới hạn upload sau khi nén")
+        raise VideoError("Video quá nặng, nén rồi vẫn vượt giới hạn 50MB của Telegram.")
     return dst
 
 
@@ -113,13 +146,14 @@ def download(url: str, cfg: Config, workdir: Path) -> Video:
         with yt_dlp.YoutubeDL(_ydl_opts(cfg, workdir)) as ydl:
             info = ydl.extract_info(url, download=True)
     except yt_dlp.utils.DownloadError as e:
-        raise VideoError(str(e).removeprefix("ERROR: ")) from e
+        log.warning("yt-dlp failed on %s: %s", url, e)
+        raise VideoError(_explain(str(e))) from e
 
     if info.get("_type") == "playlist" and info.get("entries"):
         info = info["entries"][0]
     downloads = info.get("requested_downloads") or []
     if not downloads:
-        raise VideoError("Không tìm thấy video trong link")
+        raise VideoError("Bài này không có video.")
 
     path = _make_telegram_friendly(Path(downloads[0]["filepath"]), cfg.max_upload_bytes)
     probe = _probe(path)

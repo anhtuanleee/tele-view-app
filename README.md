@@ -65,6 +65,8 @@ The bot checks its connection to Telegram every 60 seconds. If Telegram has been
 - **Instagram, Reddit, YouTube** often block server IPs (Render, VPS). If downloads fail there with a login or "not a bot" error, add cookies the same way.
 - **Threads** has no yt-dlp extractor: the bot reads the post from the page Threads serves to search crawlers. If Threads changes that page, Threads links stop working until the code is updated.
 - A post with several videos (Instagram/Threads carousel) only sends the first one.
+- Some videos are geo-restricted (TikTok in particular): they only play in certain countries, and the bot can only see what its server's country sees. TikTok photo slideshows have no video and aren't supported.
+- When a link fails, the bot replies with a short reason (geo-restricted, private, deleted, no video…). The full yt-dlp error only goes to the log.
 - Platforms change their anti-download measures often. When downloads break, update yt-dlp first: `uv lock --upgrade-package yt-dlp && uv sync`.
 - Pages that need JavaScript to show their content, or are behind a paywall, can't be extracted.
 - Images on Telegraph pages are loaded straight from the original site. If that site blocks hotlinking, images may not show.
