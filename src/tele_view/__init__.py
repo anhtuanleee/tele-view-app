@@ -17,6 +17,7 @@ from aiogram.types import FSInputFile, InputMediaPhoto, LinkPreviewOptions, Mess
 from . import article, tweet, video
 from .cache import Cache
 from .config import Config, load_config
+from .health import Health
 from .links import PLATFORM_LABELS, classify, extract_urls
 from .telegraph import Telegraph, TelegraphError
 
@@ -56,6 +57,18 @@ class TeleView:
         self.cache = Cache(cfg.data_dir / "cache.sqlite3")
         self.telegraph = Telegraph(cfg.telegraph_token, cfg.data_dir / "telegraph_token")
         self.jobs = asyncio.Semaphore(cfg.max_jobs)
+        # link counters since startup, reported by /health
+        self.processing = 0
+        self.succeeded = 0
+        self.failed = 0
+
+    def stats(self) -> dict:
+        return {
+            "processing": self.processing,
+            "max_concurrent": self.cfg.max_jobs,
+            "succeeded": self.succeeded,
+            "failed": self.failed,
+        }
 
     async def handle(self, message: Message) -> None:
         if self.cfg.allowed_chat_ids and message.chat.id not in self.cfg.allowed_chat_ids:
@@ -64,14 +77,19 @@ class TeleView:
             kind = classify(url)
             if kind is None:
                 continue
+            self.processing += 1
             try:
                 if kind == "article":
                     await self.send_article(message, url)
                 else:
                     await self.send_video(message, url, PLATFORM_LABELS[kind], is_x=kind == "x")
+                self.succeeded += 1
             except Exception as e:
+                self.failed += 1
                 log.exception("failed on %s", url)
                 await message.reply(f"⚠️ {escape(_trim(str(e), 300))}", disable_notification=True)
+            finally:
+                self.processing -= 1
 
     async def send_video(
         self, message: Message, url: str, label: str, is_x: bool = False, cache_key: str | None = None
@@ -198,10 +216,15 @@ async def run() -> None:
 
     me = await bot.get_me()
     log.info("running as @%s (upload limit %dMB)", me.username, cfg.max_upload_bytes // 1024 // 1024)
+    health = Health(bot, me.username, app.stats) if cfg.port else None
+    if health:
+        await health.start(cfg.port)
     try:
         await dp.start_polling(bot, allowed_updates=["message"])
     finally:
         await app.telegraph.close()
+        if health:
+            await health.stop()
 
 
 def main() -> None:

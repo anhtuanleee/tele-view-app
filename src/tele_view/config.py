@@ -20,6 +20,8 @@ class Config:
     telegraph_token: str | None
     data_dir: Path
     max_jobs: int
+    # set by hosts like Render: serve /health there so an external pinger keeps the service awake
+    port: int | None
 
     @property
     def max_upload_bytes(self) -> int:
@@ -45,4 +47,5 @@ def load_config() -> Config:
         telegraph_token=os.getenv("TELEGRAPH_TOKEN") or None,
         data_dir=data_dir,
         max_jobs=int(os.getenv("MAX_JOBS", "2")),
+        port=int(port) if (port := os.getenv("PORT")) else None,
     )
