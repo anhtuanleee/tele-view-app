@@ -75,7 +75,9 @@ class _YdlLogger:
 
 def _ydl_opts(cfg: Config, workdir: Path) -> dict:
     opts = {
-        "outtmpl": str(workdir / "%(id)s.%(ext)s"),
+        # bytes-capped: direct CDN links (e.g. from tikwm) get their whole query string as the id,
+        # which overflows the 255-byte file name limit
+        "outtmpl": str(workdir / "%(id).80B.%(ext)s"),
         "format": "bv*+ba/b",
         # prefer <=720p H.264 in mp4: plays everywhere in Telegram and stays small
         "format_sort": ["res:720", "vcodec:h264", "ext:mp4:m4a"],
