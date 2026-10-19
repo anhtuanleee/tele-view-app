@@ -17,7 +17,7 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.types import FSInputFile, InputMediaPhoto, LinkPreviewOptions, Message, ReplyParameters
 
-from . import article, threads, tweet, video
+from . import article, threads, tiktok, tweet, video
 from .cache import Cache
 from .config import Config, load_config
 from .health import Health
@@ -131,6 +131,8 @@ class TeleView:
                     await self.send_article(message, url)
                 elif kind == "threads":
                     await self.send_threads(message, url)
+                elif kind == "tiktok":
+                    await self.send_tiktok(message, url)
                 else:
                     await self.send_video(message, url, PLATFORM_LABELS[kind], is_x=kind == "x")
                 self.succeeded += 1
@@ -197,6 +199,21 @@ class TeleView:
             return False
         await self.send_post(message, url, "X", t.author, t.handle, t.text, t.photos)
         return True
+
+    async def send_tiktok(self, message: Message, url: str) -> None:
+        try:
+            await self.send_video(message, url, "TikTok")
+        except video.VideoError as e:
+            # sensitive, age-restricted or geo-blocked posts and photo slideshows: tikwm reads them without a login
+            post = await tiktok.fetch(url)
+            if post is None:
+                raise
+            log.info("yt-dlp failed on %s (%s), using tikwm", url, e)
+            if post.video:
+                meta = {"title": "", "description": post.text, "uploader": f"@{post.handle}"}
+                await self.send_video(message, url, "TikTok", source=post.video, meta=meta)
+            else:
+                await self.send_post(message, url, "TikTok", post.author, post.handle, post.text, post.photos)
 
     async def send_threads(self, message: Message, url: str) -> None:
         post = await threads.fetch(url)

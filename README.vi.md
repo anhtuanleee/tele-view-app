@@ -66,7 +66,7 @@ Cứ 60 giây bot gọi thử Telegram một lần. Nếu mất kết nối quá
 - **Instagram, Reddit, YouTube** hay chặn IP máy chủ (Render, VPS). Nếu trên server bị lỗi đòi đăng nhập hoặc "not a bot", thêm cookie theo cách trên.
 - **Threads** không có extractor trong yt-dlp: bot đọc bài từ trang mà Threads trả cho bot tìm kiếm. Nếu Threads đổi trang đó, link Threads sẽ ngừng chạy cho tới khi sửa code.
 - Bài có nhiều video (carousel Instagram/Threads) chỉ gửi video đầu tiên.
-- Một số video bị giới hạn khu vực (TikTok hay gặp): chỉ xem được ở một số nước, và bot chỉ thấy những gì nước đặt máy chủ thấy. Bài ảnh slideshow của TikTok không có video nên chưa hỗ trợ.
+- **TikTok**: khi yt-dlp lỗi (bài nhạy cảm, giới hạn độ tuổi, một số video bị chặn khu vực), bot chuyển sang API công khai [tikwm](https://www.tikwm.com). Cách này không cần đăng nhập và lấy được cả bài ảnh slideshow, nhưng link sẽ được gửi qua dịch vụ bên thứ ba đó. Một số video vẫn không xem được từ nước đặt máy chủ.
 - Khi link lỗi, bot trả lời kèm lý do ngắn (giới hạn khu vực, riêng tư, đã xoá, không có video…). Lỗi chi tiết của yt-dlp chỉ ghi vào log.
 - Các nền tảng hay đổi cơ chế chống tải. Khi bị lỗi thì cập nhật yt-dlp trước: `uv lock --upgrade-package yt-dlp && uv sync`.
 - Trang cần JavaScript mới hiện nội dung, hoặc có paywall, thì không trích được bài.
@@ -84,6 +84,7 @@ src/tele_view/
   telegraph.py  API Telegraph
   tweet.py      tweet không có video (qua FxTwitter)
   threads.py    bài Threads (video, ảnh, chữ)
+  tiktok.py     TikTok dự phòng qua tikwm (bài bị giới hạn, slideshow)
   cache.py      cache SQLite
   health.py     endpoint /health (bật khi có biến PORT)
 ```
