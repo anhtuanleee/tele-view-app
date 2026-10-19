@@ -23,6 +23,7 @@ from .config import Config, load_config
 from .health import Health
 from .links import PLATFORM_LABELS, classify, extract_urls
 from .telegraph import Telegraph, TelegraphError
+from .translate import Translation, translate
 
 log = logging.getLogger("tele_view")
 
@@ -51,7 +52,7 @@ def _trim(text: str, limit: int) -> str:
     return units[: (limit - 1) * 2].decode("utf-16-le", "ignore").rstrip() + "…"
 
 
-def _body(text: str, limit: int) -> str:
+def _text_block(text: str, limit: int) -> str:
     """Escaped text, collapsed into an expandable quote when long."""
     text = _trim(text.strip(), limit)
     if len(text) > COLLAPSE_CHARS or text.count("\n") >= COLLAPSE_LINES:
@@ -59,17 +60,31 @@ def _body(text: str, limit: int) -> str:
     return escape(text)
 
 
-def _video_caption(v: video.Video, url: str, label: str) -> str:
+def _body(text: str, limit: int, translation: Translation | None = None) -> str:
+    """Post text; when translated, the translation comes first and the original sits collapsed below."""
+    if translation is None:
+        return _text_block(text, limit)
+    note = f"🌐 Bản gốc ({translation.source.upper()}):"
+    half = (limit - len(note) - 2) // 2
+    original = escape(_trim(text.strip(), half))
+    return f"{_text_block(translation.text, half)}\n<blockquote expandable>{escape(note)}\n{original}</blockquote>"
+
+
+def _video_text(v: video.Video) -> str:
+    # TikTok/Douyin titles are usually the description cut short
+    if v.title and v.description and not v.description.startswith(v.title[:30]):
+        return f"{v.title}\n{v.description}"
+    return v.description or v.title
+
+
+def _video_caption(v: video.Video, url: str, label: str, translation: Translation | None = None) -> str:
     source = f'🔗 <a href="{escape(url)}">{escape(label)}</a>'
     if v.uploader:
         source += f" · {escape(v.uploader)}"
-    body = v.description or v.title
-    # TikTok/Douyin titles are usually the description cut short
-    if v.title and v.description and not v.description.startswith(v.title[:30]):
-        body = f"{v.title}\n{v.description}"
+    body = _video_text(v)
     # Telegram counts the caption limit after parsing, so tags don't use up room
     room = CAPTION_LIMIT - len(f"{label} · {v.uploader}") - 8
-    return f"{_body(body, room)}\n\n{source}" if body.strip() else source
+    return f"{_body(body, room, translation)}\n\n{source}" if body.strip() else source
 
 
 def _error_text(kind: str, error: Exception) -> str:
@@ -99,6 +114,9 @@ class TeleView:
         self.processing = 0
         self.succeeded = 0
         self.failed = 0
+
+    async def translate(self, text: str) -> Translation | None:
+        return await translate(text, self.cfg.translate_to) if self.cfg.translate_to else None
 
     def stats(self) -> dict:
         return {
@@ -180,7 +198,7 @@ class TeleView:
                     raise
                 if meta:
                     v = dataclasses.replace(v, **meta)
-                caption = _video_caption(v, url, label)
+                caption = _video_caption(v, url, label, await self.translate(_video_text(v)))
                 sent = await message.answer_video(
                     FSInputFile(v.path),
                     caption=caption,
@@ -234,7 +252,10 @@ class TeleView:
         header = f"<b>{escape(author)}</b> @{escape(handle)}"
         source = f'🔗 <a href="{escape(url)}">{escape(label)}</a>'
         room = (CAPTION_LIMIT if photos else MESSAGE_LIMIT) - len(f"{author} @{handle} {label}") - 8
-        text = f"{header}\n{_body(body, room)}\n\n{source}" if body.strip() else f"{header}\n\n{source}"
+        if body.strip():
+            text = f"{header}\n{_body(body, room, await self.translate(body))}\n\n{source}"
+        else:
+            text = f"{header}\n\n{source}"
         if not photos:
             await message.answer(text, reply_parameters=reply, link_preview_options=LinkPreviewOptions(is_disabled=True))
         elif len(text) <= CAPTION_LIMIT:
@@ -258,9 +279,14 @@ class TeleView:
                 log.warning("telegraph rejected %s: %s", url, e)
                 raise article.ArticleError("Telegraph không nhận bài này.") from e
             meta = {"title": a.title, "site": a.site, "has_video": a.has_video}
+            if tr := await self.translate(a.title):
+                meta["translated_title"] = tr.text
             self.cache.put(url, "article", page_url, json.dumps(meta, ensure_ascii=False))
 
-        text = f"📰 <b>{escape(meta['title'])}</b>"
+        if translated := meta.get("translated_title"):
+            text = f"📰 <b>{escape(translated)}</b>\n<i>{escape(meta['title'])}</i>"
+        else:
+            text = f"📰 <b>{escape(meta['title'])}</b>"
         if meta["site"]:
             text += f"\n{escape(meta['site'])}"
         text += f'\n\n<a href="{page_url}">⚡ Đọc ngay trong Telegram</a>'

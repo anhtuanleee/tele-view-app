@@ -67,6 +67,7 @@ Cứ 60 giây bot gọi thử Telegram một lần. Nếu mất kết nối quá
 - **Threads** không có extractor trong yt-dlp: bot đọc bài từ trang mà Threads trả cho bot tìm kiếm. Nếu Threads đổi trang đó, link Threads sẽ ngừng chạy cho tới khi sửa code.
 - Bài có nhiều video (carousel Instagram/Threads) chỉ gửi video đầu tiên.
 - **TikTok**: khi yt-dlp lỗi (bài nhạy cảm, giới hạn độ tuổi, một số video bị chặn khu vực), bot chuyển sang API công khai [tikwm](https://www.tikwm.com). Cách này không cần đăng nhập và lấy được cả bài ảnh slideshow, nhưng link sẽ được gửi qua dịch vụ bên thứ ba đó. Một số video vẫn không xem được từ nước đặt máy chủ.
+- **Dịch**: caption, nội dung bài và tiêu đề bài báo không phải tiếng Việt sẽ được dịch, bản gốc giữ trong khung thu gọn. Bot dùng endpoint miễn phí, không chính thức của Google Translate (không cần key), nên có thể ngừng chạy bất cứ lúc nào; khi đó bot chỉ hiện bản gốc. Đặt `TRANSLATE_TO` thành mã ngôn ngữ khác, hoặc để trống để tắt dịch. Nội dung đầy đủ trong trang bài báo không được dịch.
 - Khi link lỗi, bot trả lời kèm lý do ngắn (giới hạn khu vực, riêng tư, đã xoá, không có video…). Lỗi chi tiết của yt-dlp chỉ ghi vào log.
 - Các nền tảng hay đổi cơ chế chống tải. Khi bị lỗi thì cập nhật yt-dlp trước: `uv lock --upgrade-package yt-dlp && uv sync`.
 - Trang cần JavaScript mới hiện nội dung, hoặc có paywall, thì không trích được bài.
@@ -85,6 +86,7 @@ src/tele_view/
   tweet.py      tweet không có video (qua FxTwitter)
   threads.py    bài Threads (video, ảnh, chữ)
   tiktok.py     TikTok dự phòng qua tikwm (bài bị giới hạn, slideshow)
+  translate.py  dịch qua endpoint miễn phí của Google Translate
   cache.py      cache SQLite
   health.py     endpoint /health (bật khi có biến PORT)
 ```

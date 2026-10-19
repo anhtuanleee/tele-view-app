@@ -67,6 +67,7 @@ The bot checks its connection to Telegram every 60 seconds. If Telegram has been
 - **Threads** has no yt-dlp extractor: the bot reads the post from the page Threads serves to search crawlers. If Threads changes that page, Threads links stop working until the code is updated.
 - A post with several videos (Instagram/Threads carousel) only sends the first one.
 - **TikTok**: when yt-dlp fails (sensitive or age-restricted posts, some geo-blocked videos) the bot falls back to the public [tikwm](https://www.tikwm.com) API, which needs no login and also handles photo slideshows. Links are then sent to that third-party service. Some videos are still unavailable from the server's country.
+- **Translation**: captions, post text and article titles that aren't in Vietnamese are translated, with the original kept in a collapsed quote. It uses Google Translate's free, unofficial endpoint (no key), so it may stop working without notice; the bot then just shows the original. Set `TRANSLATE_TO` to another language code, or leave it empty to turn translation off. Full article pages are not translated.
 - When a link fails, the bot replies with a short reason (geo-restricted, private, deleted, no video…). The full yt-dlp error only goes to the log.
 - Platforms change their anti-download measures often. When downloads break, update yt-dlp first: `uv lock --upgrade-package yt-dlp && uv sync`.
 - Pages that need JavaScript to show their content, or are behind a paywall, can't be extracted.
@@ -85,6 +86,7 @@ src/tele_view/
   tweet.py      tweets without video (via FxTwitter)
   threads.py    Threads posts (video, photos, text)
   tiktok.py     TikTok fallback via tikwm (restricted posts, slideshows)
+  translate.py  translation via Google Translate's free endpoint
   cache.py      SQLite cache
   health.py     /health endpoint (enabled when PORT is set)
 ```

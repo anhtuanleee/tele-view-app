@@ -23,6 +23,8 @@ class Config:
     max_jobs: int
     # set by hosts like Render: serve /health there so an external pinger keeps the service awake
     port: int | None
+    # language captions and titles are translated into; None turns translation off
+    translate_to: str | None
 
     @property
     def max_upload_bytes(self) -> int:
@@ -60,4 +62,5 @@ def load_config() -> Config:
         data_dir=data_dir,
         max_jobs=int(os.getenv("MAX_JOBS", "2")),
         port=int(port) if (port := os.getenv("PORT")) else None,
+        translate_to=os.getenv("TRANSLATE_TO", "vi") or None,
     )
