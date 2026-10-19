@@ -1,0 +1,16 @@
+# Render Blueprint: New → Blueprint → chọn repo này
+services:
+  - type: web
+    name: tele-view
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Render hỏi giá trị lúc tạo Blueprint, không lưu trong repo
+      - key: BOT_TOKEN
+        sync: false
+      # bản free chỉ có 512MB RAM
+      - key: MAX_JOBS
+        value: "1"
