@@ -1,19 +1,10 @@
-from dataclasses import dataclass
-
 import httpx
 
+from .post import Media, Post
+
 # tikwm's public API reads posts yt-dlp can't without a login: sensitive or age-restricted videos,
-# some geo-blocked ones, and photo slideshows. Free tier allows about one request per second
+# some geo-blocked ones, and photo slideshows. Free and keyless, but unofficial: failures fall back to errors
 TIKWM_API = "https://www.tikwm.com/api/"
-
-
-@dataclass
-class Post:
-    author: str
-    handle: str
-    text: str
-    video: str | None
-    photos: list[str]
 
 
 async def fetch(url: str) -> Post | None:
@@ -27,12 +18,17 @@ async def fetch(url: str) -> Post | None:
     data = body.get("data") if body.get("code") == 0 else None
     if not data:
         return None
-    photos = data.get("images") or []
+    # slideshows list their images; anything else is a single video
+    if photos := data.get("images"):
+        media = [Media("photo", p) for p in photos]
+    elif video := data.get("hdplay") or data.get("play"):
+        media = [Media("video", video)]
+    else:
+        media = []
     author = data.get("author") or {}
     return Post(
         author=author.get("nickname", ""),
         handle=author.get("unique_id", ""),
         text=data.get("title", ""),
-        video=None if photos else (data.get("hdplay") or data.get("play")),
-        photos=photos,
+        media=media,
     )

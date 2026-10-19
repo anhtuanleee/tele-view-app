@@ -6,7 +6,7 @@ Bot Telegram giúp xem nội dung link ngay trong chat:
 
 | Link | Bot làm gì |
 |---|---|
-| TikTok, Facebook, Instagram, Threads, X, Reddit, Douyin, YouTube Shorts | Tải video về rồi gửi lại, xem luôn trong chat. Bài không có video (chỉ có chữ hoặc ảnh) thì gửi chữ và ảnh |
+| TikTok, Facebook, Instagram, Threads, X, Reddit, Douyin, YouTube Shorts | Gửi bài với đúng những gì bài có: video xem ngay trong chat, ảnh, chữ, hoặc album trộn ảnh và video |
 | Trang báo / bài viết | Trích nội dung thành trang Telegraph, có nút **⚡ Instant View** |
 | Bài báo có video | Gửi thêm video (video nhúng YouTube/Vimeo thì gửi link để Telegram tự hiện player) |
 | Video YouTube thường, Vimeo | Bỏ qua, vì Telegram đã tự hiện player |
@@ -65,7 +65,8 @@ Cứ 60 giây bot gọi thử Telegram một lần. Nếu mất kết nối quá
 - **Douyin** bắt buộc có cookie: đặt `COOKIES_FROM_BROWSER=chrome` (khi chạy trên máy có Chrome) hoặc xuất `cookies.txt` (định dạng Netscape) rồi đặt `COOKIES_FILE`. Facebook/TikTok riêng tư cũng cần cookie.
 - **Instagram, Reddit, YouTube** hay chặn IP máy chủ (Render, VPS). Nếu trên server bị lỗi đòi đăng nhập hoặc "not a bot", thêm cookie theo cách trên.
 - **Threads** không có extractor trong yt-dlp: bot đọc bài từ trang mà Threads trả cho bot tìm kiếm. Nếu Threads đổi trang đó, link Threads sẽ ngừng chạy cho tới khi sửa code.
-- Bài có nhiều video (carousel Instagram/Threads) chỉ gửi video đầu tiên.
+- Bot nhìn dạng link để chọn cách lấy: Instagram `/reel/`, Facebook `/videos/`, TikTok `/video/` lấy như video; Facebook `/photo/`, TikTok `/photo/` lấy như bài ảnh; link chưa rõ (Instagram `/p/`, Facebook `/posts/`, Reddit) thử video trước, không có thì lấy chữ và ảnh. Bài X và Threads đọc nguyên bài từ API.
+- Album tối đa 10 mục. Carousel Instagram `/p/` chỉ gửi video đầu tiên, vì yt-dlp không trả về ảnh của nó.
 - **TikTok**: khi yt-dlp lỗi (bài nhạy cảm, giới hạn độ tuổi, một số video bị chặn khu vực), bot chuyển sang API công khai [tikwm](https://www.tikwm.com). Cách này không cần đăng nhập và lấy được cả bài ảnh slideshow, nhưng link sẽ được gửi qua dịch vụ bên thứ ba đó. Một số video vẫn không xem được từ nước đặt máy chủ.
 - **Dịch**: caption, nội dung bài và tiêu đề bài báo không phải tiếng Việt sẽ được dịch, bản gốc giữ trong khung thu gọn. Bot dùng endpoint miễn phí, không chính thức của Google Translate (không cần key), nên có thể ngừng chạy bất cứ lúc nào; khi đó bot chỉ hiện bản gốc. Đặt `TRANSLATE_TO` thành mã ngôn ngữ khác, hoặc để trống để tắt dịch. Nội dung đầy đủ trong trang bài báo không được dịch.
 - Khi link lỗi, bot trả lời kèm lý do ngắn (giới hạn khu vực, riêng tư, đã xoá, không có video…). Lỗi chi tiết của yt-dlp chỉ ghi vào log.
@@ -87,6 +88,7 @@ src/tele_view/
   threads.py    bài Threads (video, ảnh, chữ)
   tiktok.py     TikTok dự phòng qua tikwm (bài bị giới hạn, slideshow)
   translate.py  dịch qua endpoint miễn phí của Google Translate
+  post.py       mô hình bài: chữ, ảnh và video theo thứ tự
   preview.py    bài chữ/ảnh Facebook, Instagram, Reddit (thẻ Open Graph)
   cache.py      cache SQLite
   health.py     endpoint /health (bật khi có biến PORT)

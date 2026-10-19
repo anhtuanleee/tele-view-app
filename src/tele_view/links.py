@@ -23,6 +23,20 @@ PLATFORM_LABELS = {
     "youtube": "YouTube Shorts",
 }
 
+# URL shapes that tell what a post holds before fetching it; other paths (Instagram /p/, Facebook
+# /posts/, Reddit /comments/, tweets) can be text, photos, video or a mix
+VIDEO_PATHS = {
+    "instagram": ("/reel/", "/reels/", "/tv/"),
+    "facebook": ("/videos/", "/watch", "/reel/", "/share/v/", "/share/r/"),
+    "tiktok": ("/video/",),
+    "douyin": ("/video/",),
+}
+PHOTO_PATHS = {
+    "facebook": ("/photo", "/photos/"),
+    "tiktok": ("/photo/",),
+}
+VIDEO_HOSTS = ("fb.watch", "v.redd.it")
+
 # Telegram already renders these natively (embedded player / Instant View)
 SKIP_DOMAINS = ("youtube.com", "youtu.be", "vimeo.com", "t.me", "telegram.me", "telegra.ph")
 
@@ -55,6 +69,18 @@ def classify(url: str) -> str | None:
     if urlparse(url).path.lower().endswith(SKIP_EXTENSIONS):
         return None
     return "article"
+
+
+def expected_media(kind: str, url: str) -> str | None:
+    """"video" or "photo" when the URL alone says what the post holds, None when only fetching it can tell."""
+    if kind == "youtube" or any(_matches(_host(url), h) for h in VIDEO_HOSTS):
+        return "video"
+    path = urlparse(url).path.lower()
+    if any(p in path for p in VIDEO_PATHS.get(kind, ())):
+        return "video"
+    if any(p in path for p in PHOTO_PATHS.get(kind, ())):
+        return "photo"
+    return None
 
 
 def extract_urls(message: Message) -> list[str]:

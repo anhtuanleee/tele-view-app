@@ -1,23 +1,15 @@
 import json
 import re
-from dataclasses import dataclass
 
 import httpx
+
+from .post import Media, Post
 
 # yt-dlp has no Threads extractor. Logged-out browsers get a login wall, but the page served to
 # search crawlers embeds the post as JSON, including its video and photo URLs
 CRAWLER_UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 POST_RE = re.compile(r"/post/([\w-]+)")
 JSON_RE = re.compile(r'<script type="application/json"[^>]*>(.*?)</script>', re.S)
-
-
-@dataclass
-class Post:
-    author: str
-    handle: str
-    text: str
-    videos: list[str]
-    photos: list[str]
 
 
 def _find(node, code: str) -> dict | None:
@@ -35,10 +27,13 @@ def _find(node, code: str) -> dict | None:
     return None
 
 
-def _media(item: dict) -> tuple[str | None, str | None]:
+def _media(item: dict) -> Media | None:
     videos = item.get("video_versions") or []
+    if videos:
+        return Media("video", videos[0]["url"])
+    # a video item also carries its thumbnail here, so only use images when there's no video
     images = (item.get("image_versions2") or {}).get("candidates") or []
-    return (videos[0]["url"] if videos else None), (images[0]["url"] if images else None)
+    return Media("photo", images[0]["url"]) if images else None
 
 
 async def fetch(url: str) -> Post | None:
@@ -65,18 +60,11 @@ async def fetch(url: str) -> Post | None:
     if post is None:
         return None
 
-    videos, photos = [], []
-    for item in post.get("carousel_media") or [post]:
-        video, image = _media(item)
-        if video:
-            videos.append(video)
-        elif image:
-            photos.append(image)
+    media = [m for item in post.get("carousel_media") or [post] if (m := _media(item))]
     user = post.get("user") or {}
     return Post(
         author=user.get("full_name") or user.get("username", ""),
         handle=user.get("username", ""),
         text=(post.get("caption") or {}).get("text", ""),
-        videos=videos,
-        photos=photos,
+        media=media,
     )
