@@ -7,6 +7,9 @@ VIDEO_PLATFORMS = {
     "facebook": ("facebook.com", "fb.watch", "fb.com"),
     "x": ("x.com", "twitter.com"),
     "douyin": ("douyin.com", "iesdouyin.com"),
+    "instagram": ("instagram.com", "instagr.am"),
+    "threads": ("threads.com", "threads.net"),
+    "reddit": ("reddit.com", "redd.it"),
 }
 
 PLATFORM_LABELS = {
@@ -14,6 +17,10 @@ PLATFORM_LABELS = {
     "facebook": "Facebook",
     "x": "X",
     "douyin": "Douyin",
+    "instagram": "Instagram",
+    "threads": "Threads",
+    "reddit": "Reddit",
+    "youtube": "YouTube Shorts",
 }
 
 # Telegram already renders these natively (embedded player / Instant View)
@@ -37,6 +44,9 @@ def classify(url: str) -> str | None:
     host = _host(url)
     if not host:
         return None
+    # Telegram shows a player for regular YouTube links, but not for Shorts
+    if _matches(host, "youtube.com") and urlparse(url).path.startswith("/shorts/"):
+        return "youtube"
     if any(_matches(host, d) for d in SKIP_DOMAINS):
         return None
     for platform, domains in VIDEO_PLATFORMS.items():

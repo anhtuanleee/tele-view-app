@@ -1,4 +1,6 @@
 import asyncio
+import contextlib
+import dataclasses
 import json
 import logging
 import re
@@ -11,10 +13,11 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ChatAction, ParseMode
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.types import FSInputFile, InputMediaPhoto, LinkPreviewOptions, Message, ReplyParameters
 
-from . import article, tweet, video
+from . import article, threads, tweet, video
 from .cache import Cache
 from .config import Config, load_config
 from .health import Health
@@ -25,9 +28,10 @@ log = logging.getLogger("tele_view")
 
 HELP = (
     "👋 Thêm tao vào group hoặc gửi link trực tiếp.\n\n"
-    "• <b>TikTok, Facebook, X, Douyin</b>: tao tải video về và gửi lại để xem ngay trong chat.\n"
+    "• <b>TikTok, Facebook, Instagram, Threads, X, Reddit, Douyin, YouTube Shorts</b>: "
+    "tao tải video về và gửi lại để xem ngay trong chat.\n"
     "• <b>Trang báo / bài viết</b>: tao chuyển thành trang có nút ⚡ Instant View.\n"
-    "• YouTube, Vimeo: Telegram đã tự hiện player nên tao bỏ qua."
+    "• Video YouTube thường, Vimeo: Telegram đã tự hiện player nên tao bỏ qua."
 )
 
 CAPTION_LIMIT = 1024
@@ -77,10 +81,22 @@ class TeleView:
             kind = classify(url)
             if kind is None:
                 continue
+            # cache hits answer instantly; anything slower gets a status reply, removed once done or failed
+            status = None
+            if self.cache.get(url) is None:
+                if kind == "article":
+                    text = "⏳ Đang lấy bài viết…"
+                elif kind == "threads":
+                    text = "⏳ Đang tải bài Threads…"
+                else:
+                    text = f"⏳ Đang tải video {PLATFORM_LABELS[kind]}…"
+                status = await message.reply(text, disable_notification=True)
             self.processing += 1
             try:
                 if kind == "article":
                     await self.send_article(message, url)
+                elif kind == "threads":
+                    await self.send_threads(message, url)
                 else:
                     await self.send_video(message, url, PLATFORM_LABELS[kind], is_x=kind == "x")
                 self.succeeded += 1
@@ -90,10 +106,21 @@ class TeleView:
                 await message.reply(f"⚠️ {escape(_trim(str(e), 300))}", disable_notification=True)
             finally:
                 self.processing -= 1
+                if status:
+                    with contextlib.suppress(TelegramAPIError):
+                        await status.delete()
 
     async def send_video(
-        self, message: Message, url: str, label: str, is_x: bool = False, cache_key: str | None = None
+        self,
+        message: Message,
+        url: str,
+        label: str,
+        is_x: bool = False,
+        cache_key: str | None = None,
+        source: str | None = None,
+        meta: dict | None = None,
     ) -> None:
+        """Download `source` (default: `url`) and send it; `meta` overrides the Video fields used in the caption."""
         reply = ReplyParameters(message_id=message.message_id, allow_sending_without_reply=True)
         cache_key = cache_key or url
         cached = self.cache.get(cache_key)
@@ -105,12 +132,14 @@ class TeleView:
             await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
             with tempfile.TemporaryDirectory(dir=self.cfg.data_dir) as tmp:
                 try:
-                    v = await asyncio.to_thread(video.download, url, self.cfg, Path(tmp))
+                    v = await asyncio.to_thread(video.download, source or url, self.cfg, Path(tmp))
                 except video.VideoError:
                     # X posts without video: show the text and photos instead
                     if is_x and await self.send_tweet(message, url):
                         return
                     raise
+                if meta:
+                    v = dataclasses.replace(v, **meta)
                 caption = _video_caption(v, url, label)
                 sent = await message.answer_video(
                     FSInputFile(v.path),
@@ -128,18 +157,35 @@ class TeleView:
         t = await tweet.fetch(url)
         if t is None:
             return False
+        await self.send_post(message, url, "X", t.author, t.handle, t.text, t.photos)
+        return True
+
+    async def send_threads(self, message: Message, url: str) -> None:
+        post = await threads.fetch(url)
+        if post is None:
+            raise RuntimeError("Không đọc được bài Threads (bài riêng tư, đã xoá, hoặc Threads chặn)")
+        if post.videos:
+            # a carousel can hold several videos; send the first like the other platforms do
+            meta = {"title": "", "description": post.text, "uploader": f"@{post.handle}"}
+            await self.send_video(message, url, "Threads", source=post.videos[0], meta=meta)
+        else:
+            await self.send_post(message, url, "Threads", post.author, post.handle, post.text, post.photos)
+
+    async def send_post(
+        self, message: Message, url: str, label: str, author: str, handle: str, body: str, photos: list[str]
+    ) -> None:
+        """A text post with optional photos (tweets and Threads posts without video)."""
         reply = ReplyParameters(message_id=message.message_id, allow_sending_without_reply=True)
-        text = f"<b>{escape(t.author)}</b> @{escape(t.handle)}\n{escape(t.text)}\n\n🔗 <a href=\"{escape(url)}\">X</a>"
-        if not t.photos:
+        text = f"<b>{escape(author)}</b> @{escape(handle)}\n{escape(body)}\n\n🔗 <a href=\"{escape(url)}\">{escape(label)}</a>"
+        if not photos:
             await message.answer(text, reply_parameters=reply, link_preview_options=LinkPreviewOptions(is_disabled=True))
         elif len(text) <= CAPTION_LIMIT:
-            media = [InputMediaPhoto(media=p) for p in t.photos[:10]]
+            media = [InputMediaPhoto(media=p) for p in photos[:10]]
             media[0].caption = text
             await message.answer_media_group(media, reply_parameters=reply)
         else:
-            await message.answer_media_group([InputMediaPhoto(media=p) for p in t.photos[:10]], reply_parameters=reply)
+            await message.answer_media_group([InputMediaPhoto(media=p) for p in photos[:10]], reply_parameters=reply)
             await message.answer(text, link_preview_options=LinkPreviewOptions(is_disabled=True))
-        return True
 
     async def send_article(self, message: Message, url: str) -> None:
         cached = self.cache.get(url)

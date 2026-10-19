@@ -122,13 +122,15 @@ def download(url: str, cfg: Config, workdir: Path) -> Video:
         raise VideoError("Không tìm thấy video trong link")
 
     path = _make_telegram_friendly(Path(downloads[0]["filepath"]), cfg.max_upload_bytes)
-    vstream = next(s for s in _probe(path)["streams"] if s.get("codec_type") == "video")
+    probe = _probe(path)
+    vstream = next(s for s in probe["streams"] if s.get("codec_type") == "video")
     return Video(
         path=path,
         title=(info.get("title") or "").strip(),
         description=(info.get("description") or "").strip(),
         uploader=(info.get("uploader") or info.get("channel") or "").strip(),
-        duration=int(info.get("duration") or 0),
+        # direct files and some Instagram posts carry no duration in their metadata
+        duration=int(info.get("duration") or float(probe["format"].get("duration") or 0)),
         width=vstream.get("width"),
         height=vstream.get("height"),
     )

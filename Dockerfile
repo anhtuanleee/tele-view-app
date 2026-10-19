@@ -2,6 +2,8 @@ FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:0.8.22 /uv /bin/uv
+# yt-dlp needs a JS runtime to solve YouTube's player challenges
+COPY --from=denoland/deno:bin-2.9.7 /deno /usr/local/bin/deno
 
 WORKDIR /app
 COPY pyproject.toml uv.lock .python-version ./

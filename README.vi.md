@@ -6,10 +6,10 @@ Bot Telegram giúp xem nội dung link ngay trong chat:
 
 | Link | Bot làm gì |
 |---|---|
-| TikTok, Facebook, X, Douyin | Tải video về rồi gửi lại, xem luôn trong chat. Tweet không có video thì gửi chữ và ảnh |
+| TikTok, Facebook, Instagram, Threads, X, Reddit, Douyin, YouTube Shorts | Tải video về rồi gửi lại, xem luôn trong chat. Bài X và Threads không có video thì gửi chữ và ảnh |
 | Trang báo / bài viết | Trích nội dung thành trang Telegraph, có nút **⚡ Instant View** |
 | Bài báo có video | Gửi thêm video (video nhúng YouTube/Vimeo thì gửi link để Telegram tự hiện player) |
-| YouTube, Vimeo | Bỏ qua, vì Telegram đã tự hiện player |
+| Video YouTube thường, Vimeo | Bỏ qua, vì Telegram đã tự hiện player |
 
 ## Chạy
 
@@ -62,6 +62,9 @@ Cứ 60 giây bot gọi thử Telegram một lần. Nếu mất kết nối quá
 - **Video tối đa 50MB** khi dùng Bot API thường. Video lớn hơn sẽ tự nén xuống 720p. Video quá dài (khoảng trên 25 phút) vẫn không vừa thì bot báo lỗi.
   Muốn gửi tới **2GB**: lấy `api_id`/`api_hash` ở <https://my.telegram.org>, thêm `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `BOT_API_URL=http://telegram-bot-api:8081` vào `.env`, rồi chạy `docker compose --profile local up -d --build`.
 - **Douyin** bắt buộc có cookie: đặt `COOKIES_FROM_BROWSER=chrome` (khi chạy trên máy có Chrome) hoặc xuất `cookies.txt` (định dạng Netscape) rồi đặt `COOKIES_FILE`. Facebook/TikTok riêng tư cũng cần cookie.
+- **Instagram, Reddit, YouTube** hay chặn IP máy chủ (Render, VPS). Nếu trên server bị lỗi đòi đăng nhập hoặc "not a bot", thêm cookie theo cách trên.
+- **Threads** không có extractor trong yt-dlp: bot đọc bài từ trang mà Threads trả cho bot tìm kiếm. Nếu Threads đổi trang đó, link Threads sẽ ngừng chạy cho tới khi sửa code.
+- Bài có nhiều video (carousel Instagram/Threads) chỉ gửi video đầu tiên.
 - Các nền tảng hay đổi cơ chế chống tải. Khi bị lỗi thì cập nhật yt-dlp trước: `uv lock --upgrade-package yt-dlp && uv sync`.
 - Trang cần JavaScript mới hiện nội dung, hoặc có paywall, thì không trích được bài.
 - Ảnh trong trang Telegraph được lấy trực tiếp từ link gốc. Trang gốc chặn hotlink thì ảnh có thể không hiện.
@@ -77,6 +80,7 @@ src/tele_view/
   article.py    trích bài (trafilatura) → node Telegraph
   telegraph.py  API Telegraph
   tweet.py      tweet không có video (qua FxTwitter)
+  threads.py    bài Threads (video, ảnh, chữ)
   cache.py      cache SQLite
   health.py     endpoint /health (bật khi có biến PORT)
 ```

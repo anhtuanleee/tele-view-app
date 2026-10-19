@@ -6,10 +6,10 @@ A Telegram bot that lets you view linked content right inside the chat:
 
 | Link | What the bot does |
 |---|---|
-| TikTok, Facebook, X, Douyin | Downloads the video and sends it back so it plays in the chat. Tweets without video are sent as text and photos |
+| TikTok, Facebook, Instagram, Threads, X, Reddit, Douyin, YouTube Shorts | Downloads the video and sends it back so it plays in the chat. X and Threads posts without video are sent as text and photos |
 | News sites / articles | Extracts the article into a Telegraph page with an **⚡ Instant View** button |
 | Articles with a video | Also sends the video (YouTube/Vimeo embeds are sent as a link so Telegram shows its own player) |
-| YouTube, Vimeo | Skipped, since Telegram already shows a player |
+| Regular YouTube videos, Vimeo | Skipped, since Telegram already shows a player |
 
 ## Running
 
@@ -62,6 +62,9 @@ The bot checks its connection to Telegram every 60 seconds. If Telegram has been
 - **Videos up to 50MB** with the regular Bot API. Larger videos are compressed to 720p automatically. Videos that are too long to fit even after compressing (roughly over 25 minutes) fail with an error.
   To send up to **2GB**: get an `api_id`/`api_hash` at <https://my.telegram.org>, add `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` and `BOT_API_URL=http://telegram-bot-api:8081` to `.env`, then run `docker compose --profile local up -d --build`.
 - **Douyin** requires cookies: set `COOKIES_FROM_BROWSER=chrome` (on a machine with Chrome) or export a `cookies.txt` (Netscape format) and set `COOKIES_FILE`. Private Facebook/TikTok videos need cookies too.
+- **Instagram, Reddit, YouTube** often block server IPs (Render, VPS). If downloads fail there with a login or "not a bot" error, add cookies the same way.
+- **Threads** has no yt-dlp extractor: the bot reads the post from the page Threads serves to search crawlers. If Threads changes that page, Threads links stop working until the code is updated.
+- A post with several videos (Instagram/Threads carousel) only sends the first one.
 - Platforms change their anti-download measures often. When downloads break, update yt-dlp first: `uv lock --upgrade-package yt-dlp && uv sync`.
 - Pages that need JavaScript to show their content, or are behind a paywall, can't be extracted.
 - Images on Telegraph pages are loaded straight from the original site. If that site blocks hotlinking, images may not show.
@@ -77,6 +80,7 @@ src/tele_view/
   article.py    article extraction (trafilatura) → Telegraph nodes
   telegraph.py  Telegraph API
   tweet.py      tweets without video (via FxTwitter)
+  threads.py    Threads posts (video, photos, text)
   cache.py      SQLite cache
   health.py     /health endpoint (enabled when PORT is set)
 ```
