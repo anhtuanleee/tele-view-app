@@ -36,7 +36,8 @@ Nhớ tắt bot trên máy local trước, vì hai nơi dùng chung token sẽ b
 
 1. Tạo *Web Service* từ repo GitHub: Language chọn **Docker**, Instance Type chọn **Free**, Health Check Path đặt **`/health`**.
 2. Thêm biến môi trường `BOT_TOKEN`. Nên đặt thêm `MAX_JOBS=1` vì bản free ít RAM, và `TELEGRAPH_TOKEN` để bot không tạo tài khoản Telegraph mới mỗi lần khởi động. Token này nằm trong file `data/telegraph_token` sau khi bot chạy local lần đầu.
-3. Bản free sẽ ngủ sau 15 phút không có request. Dùng [cron-job.org](https://cron-job.org) hoặc [UptimeRobot](https://uptimerobot.com) ping `https://<tên-service>.onrender.com/health` mỗi 5–10 phút.
+3. Không bắt buộc, dùng cho nội dung cần đăng nhập (riêng tư, giới hạn độ tuổi, nhạy cảm): đăng nhập trang đó trên trình duyệt, xuất `cookies.txt` (định dạng Netscape), thêm vào *Environment → Secret Files* với tên `cookies.txt`, rồi đặt `COOKIES_FILE=/etc/secrets/cookies.txt`. Cookie của nhiều trang có thể gộp chung một file. Nên dùng tài khoản phụ, vì nền tảng có thể đánh dấu tài khoản.
+4. Bản free sẽ ngủ sau 15 phút không có request. Dùng [cron-job.org](https://cron-job.org) hoặc [UptimeRobot](https://uptimerobot.com) ping `https://<tên-service>.onrender.com/health` mỗi 5–10 phút.
 
 Bản free không có ổ đĩa lưu trữ, nên cache mất mỗi lần restart. Video đã gửi vẫn nằm trên Telegram, gửi lại link cũ thì bot chỉ tải lại từ đầu.
 

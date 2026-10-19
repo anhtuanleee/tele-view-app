@@ -136,7 +136,11 @@ class TeleView:
                 self.succeeded += 1
             except Exception as e:
                 self.failed += 1
-                log.exception("failed on %s", url)
+                if isinstance(e, (video.VideoError, article.ArticleError)):
+                    # expected (private, deleted, geo-blocked…): the cause is already logged, no traceback
+                    log.info("gave up on %s: %s", url, e)
+                else:
+                    log.exception("failed on %s", url)
                 await message.reply(_error_text(kind, e), disable_notification=True)
             finally:
                 self.processing -= 1

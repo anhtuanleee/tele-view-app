@@ -54,6 +54,15 @@ class Video:
     height: int | None
 
 
+class _YdlLogger:
+    """yt-dlp prints errors to stderr on its own; keep its output at debug, download() logs failures once."""
+
+    def debug(self, msg: str) -> None:
+        log.debug(msg)
+
+    info = warning = error = debug
+
+
 def _ydl_opts(cfg: Config, workdir: Path) -> dict:
     opts = {
         "outtmpl": str(workdir / "%(id)s.%(ext)s"),
@@ -66,6 +75,7 @@ def _ydl_opts(cfg: Config, workdir: Path) -> dict:
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
+        "logger": _YdlLogger(),
         "socket_timeout": 30,
         "retries": 3,
     }

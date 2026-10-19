@@ -36,7 +36,8 @@ Stop the bot on your local machine first: two instances using the same token fai
 
 1. Create a *Web Service* from the GitHub repo: Language **Docker**, Instance Type **Free**, Health Check Path **`/health`**.
 2. Add the `BOT_TOKEN` environment variable. Also recommended: `MAX_JOBS=1`, since the free tier has little RAM, and `TELEGRAPH_TOKEN`, so the bot doesn't create a new Telegraph account on every start. You'll find that token in `data/telegraph_token` after running the bot locally once.
-3. Free services sleep after 15 minutes without requests. Use [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com) to ping `https://<service-name>.onrender.com/health` every 5–10 minutes.
+3. Optional, for content that needs a login (private, age-restricted, sensitive): export a `cookies.txt` (Netscape format) while logged in to the site, add it under *Environment → Secret Files* as `cookies.txt`, and set `COOKIES_FILE=/etc/secrets/cookies.txt`. Cookies for several sites can go in one file. Use a throwaway account, since the platform may flag it.
+4. Free services sleep after 15 minutes without requests. Use [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com) to ping `https://<service-name>.onrender.com/health` every 5–10 minutes.
 
 The free tier has no persistent disk, so the cache is lost on every restart. Videos already sent stay on Telegram; resending an old link just makes the bot download it again.
 
