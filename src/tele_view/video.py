@@ -146,20 +146,6 @@ def _make_telegram_friendly(src: Path, max_bytes: int) -> Path:
     return dst
 
 
-def find_embed(url: str, cfg: Config) -> str | None:
-    """Blocking. If a page's video is an embed from another site (YouTube, TikTok...), return that URL."""
-    try:
-        with yt_dlp.YoutubeDL(_ydl_opts(cfg, Path("."))) as ydl:
-            info = ydl.extract_info(url, download=False, process=False)
-    except yt_dlp.utils.DownloadError:
-        return None
-    if info.get("_type") == "playlist":
-        info = next(iter(info.get("entries") or []), None) or {}
-    if info.get("_type") in ("url", "url_transparent"):
-        return info.get("url")
-    return None
-
-
 def download(url: str, cfg: Config, workdir: Path) -> Video:
     """Blocking: run via asyncio.to_thread."""
     try:

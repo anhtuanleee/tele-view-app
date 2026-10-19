@@ -18,7 +18,6 @@ class Config:
     allowed_chat_ids: frozenset[int]
     cookies_file: str | None
     cookies_from_browser: str | None
-    telegraph_token: str | None
     data_dir: Path
     max_jobs: int
     # set by hosts like Render: serve /health there so an external pinger keeps the service awake
@@ -58,7 +57,6 @@ def load_config() -> Config:
         allowed_chat_ids=frozenset(int(x) for x in allowed.replace(" ", "").split(",") if x),
         cookies_file=cookies_file,
         cookies_from_browser=os.getenv("COOKIES_FROM_BROWSER") or None,
-        telegraph_token=os.getenv("TELEGRAPH_TOKEN") or None,
         data_dir=data_dir,
         max_jobs=int(os.getenv("MAX_JOBS", "2")),
         port=int(port) if (port := os.getenv("PORT")) else None,

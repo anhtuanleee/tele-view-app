@@ -37,11 +37,6 @@ PHOTO_PATHS = {
 }
 VIDEO_HOSTS = ("fb.watch", "v.redd.it")
 
-# Telegram already renders these natively (embedded player / Instant View)
-SKIP_DOMAINS = ("youtube.com", "youtu.be", "vimeo.com", "t.me", "telegram.me", "telegra.ph")
-
-SKIP_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".zip", ".mp4", ".mp3")
-
 MAX_LINKS_PER_MESSAGE = 3
 
 
@@ -54,21 +49,17 @@ def _matches(host: str, domain: str) -> bool:
 
 
 def classify(url: str) -> str | None:
-    """Return a platform key from VIDEO_PLATFORMS, "article", or None to ignore the link."""
+    """Return a platform key from VIDEO_PLATFORMS, or None for links that aren't from a social platform."""
     host = _host(url)
     if not host:
         return None
     # Telegram shows a player for regular YouTube links, but not for Shorts
     if _matches(host, "youtube.com") and urlparse(url).path.startswith("/shorts/"):
         return "youtube"
-    if any(_matches(host, d) for d in SKIP_DOMAINS):
-        return None
     for platform, domains in VIDEO_PLATFORMS.items():
         if any(_matches(host, d) for d in domains):
             return platform
-    if urlparse(url).path.lower().endswith(SKIP_EXTENSIONS):
-        return None
-    return "article"
+    return None
 
 
 def expected_media(kind: str, url: str) -> str | None:

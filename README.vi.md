@@ -2,14 +2,12 @@
 
 [English](README.md) | **Tiếng Việt**
 
-Bot Telegram giúp xem nội dung link ngay trong chat:
+Bot Telegram giúp xem bài mạng xã hội ngay trong chat:
 
 | Link | Bot làm gì |
 |---|---|
 | TikTok, Facebook, Instagram, Threads, X, Reddit, Douyin, YouTube Shorts | Gửi bài với đúng những gì bài có: video xem ngay trong chat, ảnh, chữ, hoặc album trộn ảnh và video |
-| Trang báo / bài viết | Trích nội dung thành trang Telegraph, có nút **⚡ Instant View** |
-| Bài báo có video | Gửi thêm video (video nhúng YouTube/Vimeo thì gửi link để Telegram tự hiện player) |
-| Video YouTube thường, Vimeo | Bỏ qua, vì Telegram đã tự hiện player |
+| Link khác (trang báo, video YouTube thường…) | Bỏ qua |
 
 ## Chạy
 
@@ -35,7 +33,7 @@ Nhớ tắt bot trên máy local trước, vì hai nơi dùng chung token sẽ b
 ### Render (free)
 
 1. Tạo *Web Service* từ repo GitHub: Language chọn **Docker**, Instance Type chọn **Free**, Health Check Path đặt **`/health`**.
-2. Thêm biến môi trường `BOT_TOKEN`. Nên đặt thêm `MAX_JOBS=1` vì bản free ít RAM, và `TELEGRAPH_TOKEN` để bot không tạo tài khoản Telegraph mới mỗi lần khởi động. Token này nằm trong file `data/telegraph_token` sau khi bot chạy local lần đầu.
+2. Thêm biến môi trường `BOT_TOKEN`. Nên đặt thêm `MAX_JOBS=1` vì bản free ít RAM.
 3. Không bắt buộc, dùng cho nội dung cần đăng nhập (riêng tư, giới hạn độ tuổi, nhạy cảm): đăng nhập trang đó trên trình duyệt, xuất `cookies.txt` (định dạng Netscape), thêm vào *Environment → Secret Files* với tên `cookies.txt`, rồi đặt `COOKIES_FILE=/etc/secrets/cookies.txt`. Cookie của nhiều trang có thể gộp chung một file. Nên dùng tài khoản phụ, vì nền tảng có thể đánh dấu tài khoản.
 4. Bản free sẽ ngủ sau 15 phút không có request. Dùng [cron-job.org](https://cron-job.org) hoặc [UptimeRobot](https://uptimerobot.com) ping `https://<tên-service>.onrender.com/health` mỗi 5–10 phút.
 
@@ -68,11 +66,9 @@ Cứ 60 giây bot gọi thử Telegram một lần. Nếu mất kết nối quá
 - Bot nhìn dạng link để chọn cách lấy: Instagram `/reel/`, Facebook `/videos/`, TikTok `/video/` lấy như video; Facebook `/photo/`, TikTok `/photo/` lấy như bài ảnh; link chưa rõ (Instagram `/p/`, Facebook `/posts/`, Reddit) thử video trước, không có thì lấy chữ và ảnh. Bài X, Threads và Facebook (trừ link video) được đọc nguyên bài trước: Facebook trả đầy đủ dữ liệu bài cho request giống trình duyệt mà không cần đăng nhập.
 - Album tối đa 10 mục. Carousel Instagram `/p/` chỉ gửi video đầu tiên, vì yt-dlp không trả về ảnh của nó.
 - **TikTok**: khi yt-dlp lỗi (bài nhạy cảm, giới hạn độ tuổi, một số video bị chặn khu vực), bot chuyển sang API công khai [tikwm](https://www.tikwm.com). Cách này không cần đăng nhập và lấy được cả bài ảnh slideshow, nhưng link sẽ được gửi qua dịch vụ bên thứ ba đó. Một số video vẫn không xem được từ nước đặt máy chủ.
-- **Dịch**: caption, nội dung bài và tiêu đề bài báo không phải tiếng Việt sẽ được dịch, bản gốc giữ trong khung thu gọn. Bot dùng endpoint miễn phí, không chính thức của Google Translate (không cần key), nên có thể ngừng chạy bất cứ lúc nào; khi đó bot chỉ hiện bản gốc. Đặt `TRANSLATE_TO` thành mã ngôn ngữ khác, hoặc để trống để tắt dịch. Nội dung đầy đủ trong trang bài báo không được dịch.
+- **Dịch**: caption và nội dung bài không phải tiếng Việt sẽ được dịch, bản gốc giữ trong khung thu gọn. Bot dùng endpoint miễn phí, không chính thức của Google Translate (không cần key), nên có thể ngừng chạy bất cứ lúc nào; khi đó bot chỉ hiện bản gốc. Đặt `TRANSLATE_TO` thành mã ngôn ngữ khác, hoặc để trống để tắt dịch.
 - Khi link lỗi, bot trả lời kèm lý do ngắn (giới hạn khu vực, riêng tư, đã xoá, không có video…). Lỗi chi tiết của yt-dlp chỉ ghi vào log.
 - Các nền tảng hay đổi cơ chế chống tải. Khi bị lỗi thì cập nhật yt-dlp trước: `uv lock --upgrade-package yt-dlp && uv sync`.
-- Trang cần JavaScript mới hiện nội dung, hoặc có paywall, thì không trích được bài.
-- Ảnh trong trang Telegraph được lấy trực tiếp từ link gốc. Trang gốc chặn hotlink thì ảnh có thể không hiện.
 - Kết quả được cache 30 ngày theo URL (`data/cache.sqlite3`), nên gửi lại cùng link sẽ có kết quả ngay.
 
 ## Cấu trúc
@@ -82,8 +78,6 @@ src/tele_view/
   __init__.py   bot: nhận link, điều phối, gửi kết quả
   links.py      tách link khỏi tin nhắn, phân loại nền tảng
   video.py      yt-dlp tải video + ffmpeg chuyển/nén cho Telegram
-  article.py    trích bài (trafilatura) → node Telegraph
-  telegraph.py  API Telegraph
   tweet.py      tweet không có video (qua FxTwitter)
   threads.py    bài Threads (video, ảnh, chữ)
   tiktok.py     TikTok dự phòng qua tikwm (bài bị giới hạn, slideshow)

@@ -1,7 +1,7 @@
 [project]
 name = "tele-view"
 version = "0.1.0"
-description = "Telegram bot: xem video TikTok/Facebook/X/Douyin và bài báo ngay trong chat"
+description = "Telegram bot: xem bài TikTok/Facebook/Instagram/Threads/X/Reddit/Douyin ngay trong chat"
 authors = [
     { name = "anhtuanlee", email = "anhtuan.freelc@gmail.com" }
 ]
@@ -12,7 +12,6 @@ dependencies = [
     "curl-cffi>=0.16.3",
     "httpx>=0.28.1",
     "python-dotenv>=1.2.4",
-    "trafilatura>=2.3.1",
     "yt-dlp[default,curl-cffi]>=2026.8.19",
 ]
 

@@ -2,14 +2,12 @@
 
 **English** | [Tiếng Việt](README.vi.md)
 
-A Telegram bot that lets you view linked content right inside the chat:
+A Telegram bot that lets you view social media posts right inside the chat:
 
 | Link | What the bot does |
 |---|---|
 | TikTok, Facebook, Instagram, Threads, X, Reddit, Douyin, YouTube Shorts | Sends the post with whatever it holds: a video that plays in the chat, photos, text, or a mixed album of photos and videos |
-| News sites / articles | Extracts the article into a Telegraph page with an **⚡ Instant View** button |
-| Articles with a video | Also sends the video (YouTube/Vimeo embeds are sent as a link so Telegram shows its own player) |
-| Regular YouTube videos, Vimeo | Skipped, since Telegram already shows a player |
+| Anything else (news sites, regular YouTube videos…) | Ignored |
 
 ## Running
 
@@ -35,7 +33,7 @@ Stop the bot on your local machine first: two instances using the same token fai
 ### Render (free)
 
 1. Create a *Web Service* from the GitHub repo: Language **Docker**, Instance Type **Free**, Health Check Path **`/health`**.
-2. Add the `BOT_TOKEN` environment variable. Also recommended: `MAX_JOBS=1`, since the free tier has little RAM, and `TELEGRAPH_TOKEN`, so the bot doesn't create a new Telegraph account on every start. You'll find that token in `data/telegraph_token` after running the bot locally once.
+2. Add the `BOT_TOKEN` environment variable. Also recommended: `MAX_JOBS=1`, since the free tier has little RAM.
 3. Optional, for content that needs a login (private, age-restricted, sensitive): export a `cookies.txt` (Netscape format) while logged in to the site, add it under *Environment → Secret Files* as `cookies.txt`, and set `COOKIES_FILE=/etc/secrets/cookies.txt`. Cookies for several sites can go in one file. Use a throwaway account, since the platform may flag it.
 4. Free services sleep after 15 minutes without requests. Use [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com) to ping `https://<service-name>.onrender.com/health` every 5–10 minutes.
 
@@ -68,11 +66,9 @@ The bot checks its connection to Telegram every 60 seconds. If Telegram has been
 - The link's shape decides the first step: Instagram `/reel/`, Facebook `/videos/` or TikTok `/video/` are fetched as videos, Facebook `/photo/` or TikTok `/photo/` as photo posts, and ambiguous links (Instagram `/p/`, Facebook `/posts/`, Reddit) are tried as video first, then as text/photo posts. X, Threads and Facebook posts (except video links) are read whole first: Facebook serves a browser-like request the full post data without a login.
 - Albums hold up to 10 items. Instagram `/p/` carousels only send their first video, since yt-dlp doesn't return their photos.
 - **TikTok**: when yt-dlp fails (sensitive or age-restricted posts, some geo-blocked videos) the bot falls back to the public [tikwm](https://www.tikwm.com) API, which needs no login and also handles photo slideshows. Links are then sent to that third-party service. Some videos are still unavailable from the server's country.
-- **Translation**: captions, post text and article titles that aren't in Vietnamese are translated, with the original kept in a collapsed quote. It uses Google Translate's free, unofficial endpoint (no key), so it may stop working without notice; the bot then just shows the original. Set `TRANSLATE_TO` to another language code, or leave it empty to turn translation off. Full article pages are not translated.
+- **Translation**: captions and post text that aren't in Vietnamese are translated, with the original kept in a collapsed quote. It uses Google Translate's free, unofficial endpoint (no key), so it may stop working without notice; the bot then just shows the original. Set `TRANSLATE_TO` to another language code, or leave it empty to turn translation off.
 - When a link fails, the bot replies with a short reason (geo-restricted, private, deleted, no video…). The full yt-dlp error only goes to the log.
 - Platforms change their anti-download measures often. When downloads break, update yt-dlp first: `uv lock --upgrade-package yt-dlp && uv sync`.
-- Pages that need JavaScript to show their content, or are behind a paywall, can't be extracted.
-- Images on Telegraph pages are loaded straight from the original site. If that site blocks hotlinking, images may not show.
 - Results are cached for 30 days per URL (`data/cache.sqlite3`), so sending the same link again is instant.
 
 ## Structure
@@ -82,8 +78,6 @@ src/tele_view/
   __init__.py   bot: receives links, dispatches, sends results
   links.py      extracts links from messages, classifies the platform
   video.py      yt-dlp download + ffmpeg conversion/compression for Telegram
-  article.py    article extraction (trafilatura) → Telegraph nodes
-  telegraph.py  Telegraph API
   tweet.py      tweets without video (via FxTwitter)
   threads.py    Threads posts (video, photos, text)
   tiktok.py     TikTok fallback via tikwm (restricted posts, slideshows)

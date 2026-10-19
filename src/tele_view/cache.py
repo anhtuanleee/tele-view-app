@@ -2,12 +2,12 @@ import sqlite3
 import time
 from pathlib import Path
 
-# telegraph pages never expire; cached Telegram file_ids stay valid for the same bot
+# cached Telegram file_ids stay valid for the same bot
 TTL_SECONDS = 30 * 24 * 3600
 
 
 class Cache:
-    """Maps a source URL to what was already sent (video file_id or telegraph URL)."""
+    """Maps a source URL to what was already sent (a video's Telegram file_id)."""
 
     def __init__(self, path: Path):
         self._db = sqlite3.connect(path)

@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import json
 import logging
 import re
 import tempfile
@@ -23,13 +22,12 @@ from aiogram.types import (
     ReplyParameters,
 )
 
-from . import article, facebook, preview, threads, tiktok, tweet, video
+from . import facebook, preview, threads, tiktok, tweet, video
 from .cache import Cache
 from .config import Config, load_config
 from .health import Health
 from .links import PLATFORM_LABELS, classify, expected_media, extract_urls
 from .post import Post
-from .telegraph import Telegraph, TelegraphError
 from .translate import Translation, translate
 
 log = logging.getLogger("tele_view")
@@ -38,8 +36,7 @@ HELP = (
     "👋 Thêm tao vào group hoặc gửi link trực tiếp.\n\n"
     "• <b>TikTok, Facebook, Instagram, Threads, X, Reddit, Douyin, YouTube Shorts</b>: "
     "tao tải video về và gửi lại để xem ngay trong chat.\n"
-    "• <b>Trang báo / bài viết</b>: tao chuyển thành trang có nút ⚡ Instant View.\n"
-    "• Video YouTube thường, Vimeo: Telegram đã tự hiện player nên tao bỏ qua."
+    "• Link khác (trang báo, YouTube thường…) tao bỏ qua."
 )
 
 CAPTION_LIMIT = 1024
@@ -52,8 +49,6 @@ UNREADABLE_POST = "Không đọc được bài này (riêng tư, đã bị xoá,
 
 # platforms whose text and photo posts are shown from their link preview tags
 PREVIEW_PLATFORMS = ("facebook", "instagram", "reddit")
-
-YOUTUBE_EMBED_RE = re.compile(r"youtube(?:-nocookie)?\.com/embed/([\w-]{11})")
 
 
 def _trim(text: str, limit: int) -> str:
@@ -107,14 +102,12 @@ def _video_caption(v: video.Video, url: str, label: str, translation: Translatio
 
 
 def _error_text(kind: str, error: Exception) -> str:
-    if kind == "article":
-        title = "Không lấy được bài viết"
-    elif kind == "threads":
+    if kind == "threads":
         title = "Không tải được bài Threads"
     else:
         title = f"Không tải được video {PLATFORM_LABELS[kind]}"
     # only our own errors carry a message meant for users; anything else gets a generic reason
-    if isinstance(error, (video.VideoError, article.ArticleError)):
+    if isinstance(error, video.VideoError):
         reason = escape(str(error))
     elif isinstance(error, TelegramAPIError):
         reason = "Telegram không nhận nội dung này."
@@ -127,7 +120,6 @@ class TeleView:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self.cache = Cache(cfg.data_dir / "cache.sqlite3")
-        self.telegraph = Telegraph(cfg.telegraph_token, cfg.data_dir / "telegraph_token")
         self.jobs = asyncio.Semaphore(cfg.max_jobs)
         # link counters since startup, reported by /health
         self.processing = 0
@@ -155,23 +147,18 @@ class TeleView:
             # cache hits answer instantly; anything slower gets a status reply, removed once done or failed
             status = None
             if self.cache.get(url) is None:
-                if kind == "article":
-                    text = "⏳ Đang lấy bài viết…"
-                elif expected_media(kind, url) == "video":
+                if expected_media(kind, url) == "video":
                     text = f"⏳ Đang tải video {PLATFORM_LABELS[kind]}…"
                 else:
                     text = f"⏳ Đang tải bài {PLATFORM_LABELS[kind]}…"
                 status = await message.reply(text, disable_notification=True)
             self.processing += 1
             try:
-                if kind == "article":
-                    await self.send_article(message, url)
-                else:
-                    await self.send_social(message, url, kind)
+                await self.send_social(message, url, kind)
                 self.succeeded += 1
             except Exception as e:
                 self.failed += 1
-                if isinstance(e, (video.VideoError, article.ArticleError)):
+                if isinstance(e, video.VideoError):
                     # expected (private, deleted, geo-blocked…): the cause is already logged, no traceback
                     log.info("gave up on %s: %s", url, e)
                 else:
@@ -247,14 +234,12 @@ class TeleView:
         message: Message,
         url: str,
         label: str,
-        cache_key: str | None = None,
         source: str | None = None,
         post: Post | None = None,
     ) -> None:
         """Download `source` (default: `url`) and send it, captioned from `post` or else the video's own metadata."""
         reply = ReplyParameters(message_id=message.message_id, allow_sending_without_reply=True)
-        cache_key = cache_key or url
-        cached = self.cache.get(cache_key)
+        cached = self.cache.get(url)
         if cached and cached[0] == "video":
             await message.answer_video(cached[1], caption=cached[2], reply_parameters=reply, supports_streaming=True)
             return
@@ -277,7 +262,7 @@ class TeleView:
                     reply_parameters=reply,
                 )
         if sent.video:
-            self.cache.put(cache_key, "video", sent.video.file_id, caption)
+            self.cache.put(url, "video", sent.video.file_id, caption)
 
     async def post_caption(self, post: Post, url: str, label: str, limit: int) -> str:
         names = [f"<b>{escape(post.author)}</b>" if post.author else "", f"@{escape(post.handle)}" if post.handle else ""]
@@ -336,62 +321,6 @@ class TeleView:
         if not fits:
             await message.answer(caption, link_preview_options=LinkPreviewOptions(is_disabled=True))
 
-    async def send_article(self, message: Message, url: str) -> None:
-        cached = self.cache.get(url)
-        if cached and cached[0] == "article":
-            page_url, meta = cached[1], json.loads(cached[2])
-        else:
-            await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
-            a = await article.fetch(url)
-            try:
-                page_url = await self.telegraph.create_page(a.title, a.nodes, a.author or a.site, a.url)
-            except TelegraphError as e:
-                log.warning("telegraph rejected %s: %s", url, e)
-                raise article.ArticleError("Telegraph không nhận bài này.") from e
-            meta = {"title": a.title, "site": a.site, "has_video": a.has_video}
-            if tr := await self.translate(a.title):
-                meta["translated_title"] = tr.text
-            self.cache.put(url, "article", page_url, json.dumps(meta, ensure_ascii=False))
-
-        if translated := meta.get("translated_title"):
-            text = f"📰 <b>{escape(translated)}</b>\n<i>{escape(meta['title'])}</i>"
-        else:
-            text = f"📰 <b>{escape(meta['title'])}</b>"
-        if meta["site"]:
-            text += f"\n{escape(meta['site'])}"
-        text += f'\n\n<a href="{page_url}">⚡ Đọc ngay trong Telegram</a>'
-        await message.reply(
-            text,
-            link_preview_options=LinkPreviewOptions(url=page_url, prefer_large_media=True),
-            disable_notification=True,
-        )
-
-        if meta.get("has_video"):
-            try:
-                await self.send_article_video(message, url, meta["site"])
-            except Exception as e:
-                # the article itself was delivered; a missing video isn't worth an error message
-                log.info("no video sent for article %s: %s", url, e)
-
-    async def send_article_video(self, message: Message, url: str, site: str) -> None:
-        embed = await asyncio.to_thread(video.find_embed, url, self.cfg)
-        if embed:
-            if m := YOUTUBE_EMBED_RE.search(embed):
-                embed = f"https://www.youtube.com/watch?v={m.group(1)}"
-            kind = classify(embed)
-            if kind is None:
-                # YouTube/Vimeo: Telegram's own link preview plays it inline
-                await message.reply(
-                    f'🎬 <a href="{escape(embed)}">Video trong bài</a>',
-                    link_preview_options=LinkPreviewOptions(url=embed, prefer_large_media=True),
-                    disable_notification=True,
-                )
-                return
-            if kind != "article":
-                await self.send_social(message, embed, kind)
-                return
-        await self.send_video(message, url, f"Video trong bài · {site or 'nguồn'}", cache_key=f"video:{url}")
-
 
 def _make_bot(cfg: Config) -> Bot:
     # long timeout: uploading a large video can take minutes
@@ -423,7 +352,6 @@ async def run() -> None:
     try:
         await dp.start_polling(bot, allowed_updates=["message"])
     finally:
-        await app.telegraph.close()
         if health:
             await health.stop()
 
