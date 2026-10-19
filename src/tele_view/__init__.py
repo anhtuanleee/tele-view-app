@@ -213,13 +213,14 @@ class TeleView:
             await self.send_video(message, url, label)
         except video.VideoError as e:
             # TikTok: tikwm reads sensitive, age-restricted and some geo-blocked posts without a login.
-            # Elsewhere, a post whose URL could be anything turned out to be text or photos
-            if not (kind == "tiktok" or (e.no_video and expect is None)):
-                raise
+            # Facebook, Instagram, Reddit: the post is text or photos, or its video needs a login (Facebook
+            # answers logged-out requests with 404). The preview still has the text when the post exists
             post = await self.fetch_post(kind, url)
             if post is None:
                 raise
             log.info("no video from yt-dlp for %s (%s), sending the post instead", url, e)
+            if not post.videos and not e.no_video:
+                post.note = f"🎬 Bài có video nhưng không tải được: {e}"
             await self.send_post(message, url, label, post)
 
     async def fetch_post(self, kind: str, url: str) -> Post | None:
@@ -270,8 +271,10 @@ class TeleView:
         names = [f"<b>{escape(post.author)}</b>" if post.author else "", f"@{escape(post.handle)}" if post.handle else ""]
         parts = [" ".join(filter(None, names))]
         if post.text.strip():
-            room = limit - len(f"{post.author} @{post.handle} {label}") - 8
+            room = limit - len(f"{post.author} @{post.handle} {label} {post.note}") - 8
             parts.append(_body(post.text, room, await self.translate(post.text)))
+        if post.note:
+            parts.append(f"<i>{escape(post.note)}</i>")
         source = f'🔗 <a href="{escape(url)}">{escape(label)}</a>'
         head = "\n".join(filter(None, parts))
         return f"{head}\n\n{source}" if head else source

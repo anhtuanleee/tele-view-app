@@ -16,6 +16,8 @@ class Post:
     handle: str = ""
     text: str = ""
     media: list[Media] = field(default_factory=list)
+    # shown under the text, e.g. why the post's video couldn't be fetched
+    note: str = ""
 
     @property
     def videos(self) -> list[Media]:
