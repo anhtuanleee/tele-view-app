@@ -51,9 +51,10 @@ ATTEMPTS = 2
 RETRY_DELAY = 5
 # error replies delete themselves after this many seconds so failures don't litter the chat
 ERROR_TTL = 30
-# an upload slower than this per MB is stuck, not slow: give up so a retry can start (the session allows 600s)
-UPLOAD_SECONDS_PER_MB = 6
-MIN_UPLOAD_TIMEOUT = 60
+# an upload slower than this per MB is stuck, not slow: give up so a retry can start (the session allows 600s).
+# The clock also covers Telegram processing the video after it arrives, so small files still get a wide floor
+UPLOAD_SECONDS_PER_MB = 10
+MIN_UPLOAD_TIMEOUT = 180
 
 UNREADABLE_POST = "Không đọc được bài này (riêng tư, đã bị xoá, hoặc nền tảng đang chặn bot)."
 
