@@ -6,7 +6,7 @@ Bot Telegram giúp xem nội dung link ngay trong chat:
 
 | Link | Bot làm gì |
 |---|---|
-| TikTok, Facebook, Instagram, Threads, X, Reddit, Douyin, YouTube Shorts | Tải video về rồi gửi lại, xem luôn trong chat. Bài X và Threads không có video thì gửi chữ và ảnh |
+| TikTok, Facebook, Instagram, Threads, X, Reddit, Douyin, YouTube Shorts | Tải video về rồi gửi lại, xem luôn trong chat. Bài không có video (chỉ có chữ hoặc ảnh) thì gửi chữ và ảnh |
 | Trang báo / bài viết | Trích nội dung thành trang Telegraph, có nút **⚡ Instant View** |
 | Bài báo có video | Gửi thêm video (video nhúng YouTube/Vimeo thì gửi link để Telegram tự hiện player) |
 | Video YouTube thường, Vimeo | Bỏ qua, vì Telegram đã tự hiện player |
@@ -87,6 +87,7 @@ src/tele_view/
   threads.py    bài Threads (video, ảnh, chữ)
   tiktok.py     TikTok dự phòng qua tikwm (bài bị giới hạn, slideshow)
   translate.py  dịch qua endpoint miễn phí của Google Translate
+  preview.py    bài chữ/ảnh Facebook, Instagram, Reddit (thẻ Open Graph)
   cache.py      cache SQLite
   health.py     endpoint /health (bật khi có biến PORT)
 ```

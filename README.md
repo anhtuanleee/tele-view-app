@@ -6,7 +6,7 @@ A Telegram bot that lets you view linked content right inside the chat:
 
 | Link | What the bot does |
 |---|---|
-| TikTok, Facebook, Instagram, Threads, X, Reddit, Douyin, YouTube Shorts | Downloads the video and sends it back so it plays in the chat. X and Threads posts without video are sent as text and photos |
+| TikTok, Facebook, Instagram, Threads, X, Reddit, Douyin, YouTube Shorts | Downloads the video and sends it back so it plays in the chat. Posts without video (text or photos) are sent as text and photos instead |
 | News sites / articles | Extracts the article into a Telegraph page with an **⚡ Instant View** button |
 | Articles with a video | Also sends the video (YouTube/Vimeo embeds are sent as a link so Telegram shows its own player) |
 | Regular YouTube videos, Vimeo | Skipped, since Telegram already shows a player |
@@ -87,6 +87,7 @@ src/tele_view/
   threads.py    Threads posts (video, photos, text)
   tiktok.py     TikTok fallback via tikwm (restricted posts, slideshows)
   translate.py  translation via Google Translate's free endpoint
+  preview.py    Facebook/Instagram/Reddit text and photo posts (Open Graph tags)
   cache.py      SQLite cache
   health.py     /health endpoint (enabled when PORT is set)
 ```

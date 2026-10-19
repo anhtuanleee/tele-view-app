@@ -5,7 +5,7 @@ import json
 import logging
 import re
 import tempfile
-from html import escape
+from html import escape, unescape
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher, F
@@ -17,7 +17,7 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.types import FSInputFile, InputMediaPhoto, LinkPreviewOptions, Message, ReplyParameters
 
-from . import article, threads, tiktok, tweet, video
+from . import article, preview, threads, tiktok, tweet, video
 from .cache import Cache
 from .config import Config, load_config
 from .health import Health
@@ -41,6 +41,9 @@ MESSAGE_LIMIT = 4096
 COLLAPSE_CHARS = 200
 COLLAPSE_LINES = 4
 
+# platforms whose text and photo posts are shown from their link preview tags
+PREVIEW_PLATFORMS = ("facebook", "instagram", "reddit")
+
 YOUTUBE_EMBED_RE = re.compile(r"youtube(?:-nocookie)?\.com/embed/([\w-]{11})")
 
 
@@ -50,6 +53,11 @@ def _trim(text: str, limit: int) -> str:
     if len(units) // 2 <= limit:
         return text
     return units[: (limit - 1) * 2].decode("utf-16-le", "ignore").rstrip() + "…"
+
+
+def _visible_len(html: str) -> int:
+    """Length as Telegram counts it: after parsing tags and entities, in UTF-16 code units."""
+    return len(unescape(re.sub(r"<[^>]+>", "", html)).encode("utf-16-le")) // 2
 
 
 def _text_block(text: str, limit: int) -> str:
@@ -152,7 +160,7 @@ class TeleView:
                 elif kind == "tiktok":
                     await self.send_tiktok(message, url)
                 else:
-                    await self.send_video(message, url, PLATFORM_LABELS[kind], is_x=kind == "x")
+                    await self.send_media(message, url, kind)
                 self.succeeded += 1
             except Exception as e:
                 self.failed += 1
@@ -211,6 +219,19 @@ class TeleView:
         if sent.video:
             self.cache.put(cache_key, "video", sent.video.file_id, caption)
 
+    async def send_media(self, message: Message, url: str, kind: str) -> None:
+        label = PLATFORM_LABELS[kind]
+        try:
+            await self.send_video(message, url, label, is_x=kind == "x")
+        except video.VideoError as e:
+            # a text or photo post: send what its link preview shows instead of an error
+            if not e.no_video or kind not in PREVIEW_PLATFORMS:
+                raise
+            post = await preview.fetch(url)
+            if post is None:
+                raise
+            await self.send_post(message, url, label, post.author, post.handle, post.text, post.photos)
+
     async def send_tweet(self, message: Message, url: str) -> bool:
         t = await tweet.fetch(url)
         if t is None:
@@ -247,20 +268,21 @@ class TeleView:
     async def send_post(
         self, message: Message, url: str, label: str, author: str, handle: str, body: str, photos: list[str]
     ) -> None:
-        """A text post with optional photos (tweets and Threads posts without video)."""
+        """A post without video: its text, with photos when it has any. `author` and `handle` may be empty."""
         reply = ReplyParameters(message_id=message.message_id, allow_sending_without_reply=True)
-        header = f"<b>{escape(author)}</b> @{escape(handle)}"
-        source = f'🔗 <a href="{escape(url)}">{escape(label)}</a>'
+        names = [f"<b>{escape(author)}</b>" if author else "", f"@{escape(handle)}" if handle else ""]
+        parts = [" ".join(filter(None, names))]
         room = (CAPTION_LIMIT if photos else MESSAGE_LIMIT) - len(f"{author} @{handle} {label}") - 8
         if body.strip():
-            text = f"{header}\n{_body(body, room, await self.translate(body))}\n\n{source}"
-        else:
-            text = f"{header}\n\n{source}"
+            parts.append(_body(body, room, await self.translate(body)))
+        source = f'🔗 <a href="{escape(url)}">{escape(label)}</a>'
+        head = "\n".join(filter(None, parts))
+        text = f"{head}\n\n{source}" if head else source
         if not photos:
             await message.answer(text, reply_parameters=reply, link_preview_options=LinkPreviewOptions(is_disabled=True))
-        elif len(text) <= CAPTION_LIMIT:
-            media = [InputMediaPhoto(media=p) for p in photos[:10]]
-            media[0].caption = text
+        elif _visible_len(text) <= CAPTION_LIMIT:
+            # aiogram types are frozen, so the caption goes in at construction
+            media = [InputMediaPhoto(media=p, caption=text if i == 0 else None) for i, p in enumerate(photos[:10])]
             await message.answer_media_group(media, reply_parameters=reply)
         else:
             await message.answer_media_group([InputMediaPhoto(media=p) for p in photos[:10]], reply_parameters=reply)

@@ -14,36 +14,43 @@ log = logging.getLogger(__name__)
 class VideoError(Exception):
     """A failure whose message is safe to show users as is."""
 
+    def __init__(self, message: str, no_video: bool = False):
+        super().__init__(message)
+        # the post exists but holds no video (a text or photo post), so its text can be shown instead
+        self.no_video = no_video
 
-# yt-dlp error text → reason shown to users, first match wins
+
+# yt-dlp error text → (reason shown to users, whether the post just has no video), first match wins
 REASONS = [
     # TikTok answers removed and geo-blocked posts with the same status, which yt-dlp reports as an IP block
     (("ip address is blocked",),
-     "Video đã bị xoá, bị giới hạn khu vực, hoặc nền tảng đang chặn máy chủ của bot."),
+     "Video đã bị xoá, bị giới hạn khu vực, hoặc nền tảng đang chặn máy chủ của bot.", False),
     (("available in your country", "geo restrict", "geo-restrict"),
-     "Video bị giới hạn theo khu vực, không xem được từ máy chủ của bot."),
+     "Video bị giới hạn theo khu vực, không xem được từ máy chủ của bot.", False),
     (("private", "permission to view", "login", "log in", "sign in", "cookies", "not a bot",
       "comfortable for some audiences", "age-restricted", "age restricted", "inappropriate"),
-     "Video riêng tư, giới hạn độ tuổi, hoặc nền tảng yêu cầu đăng nhập."),
-    (("no video formats", "no video could be found", "there's no video", "no video in this post"),
-     "Bài này không có video."),
+     "Video riêng tư, giới hạn độ tuổi, hoặc nền tảng yêu cầu đăng nhập.", False),
+    # "no media found" is Reddit's text posts, "cannot parse data" Facebook's text and photo posts
+    (("no video formats", "no video could be found", "there's no video", "no video in this post",
+      "no media found", "cannot parse data"),
+     "Bài này không có video.", True),
     (("unsupported url",),
-     "Link này không có video hoặc chưa được hỗ trợ."),
+     "Link này không có video hoặc chưa được hỗ trợ.", True),
     (("http error 429", "too many requests", "rate-limit", "rate limit", "http error 403"),
-     "Nền tảng đang tạm chặn bot. Thử lại sau ít phút."),
+     "Nền tảng đang tạm chặn bot. Thử lại sau ít phút.", False),
     (("removed", "deleted", "not available", "unavailable", "does not exist", "http error 404", "status code"),
-     "Video đã bị xoá hoặc không còn tồn tại."),
+     "Video đã bị xoá hoặc không còn tồn tại.", False),
     (("timed out", "timeout", "connection", "network", "temporary failure"),
-     "Không kết nối được tới nền tảng. Thử lại sau."),
+     "Không kết nối được tới nền tảng. Thử lại sau.", False),
 ]
 
 
-def _explain(error: str) -> str:
+def _explain(error: str) -> VideoError:
     lowered = error.lower()
-    for needles, reason in REASONS:
+    for needles, reason, no_video in REASONS:
         if any(n in lowered for n in needles):
-            return reason
-    return "Không tải được video từ link này."
+            return VideoError(reason, no_video)
+    return VideoError("Không tải được video từ link này.")
 
 
 @dataclass
@@ -110,7 +117,7 @@ def _make_telegram_friendly(src: Path, max_bytes: int) -> Path:
     vstream = next((s for s in info["streams"] if s.get("codec_type") == "video"), None)
     if vstream is None:
         # e.g. TikTok photo slideshows, which yt-dlp returns as audio only
-        raise VideoError("Bài này không có video (có thể là bài ảnh).")
+        raise VideoError("Bài này không có video (có thể là bài ảnh).", no_video=True)
     duration = float(info["format"].get("duration") or 0)
     size = src.stat().st_size
     dst = src.with_name(src.stem + ".tg.mp4")
@@ -160,13 +167,13 @@ def download(url: str, cfg: Config, workdir: Path) -> Video:
             info = ydl.extract_info(url, download=True)
     except yt_dlp.utils.DownloadError as e:
         log.warning("yt-dlp failed on %s: %s", url, e)
-        raise VideoError(_explain(str(e))) from e
+        raise _explain(str(e)) from e
 
     if info.get("_type") == "playlist" and info.get("entries"):
         info = info["entries"][0]
     downloads = info.get("requested_downloads") or []
     if not downloads:
-        raise VideoError("Bài này không có video.")
+        raise VideoError("Bài này không có video.", no_video=True)
 
     path = _make_telegram_friendly(Path(downloads[0]["filepath"]), cfg.max_upload_bytes)
     probe = _probe(path)
