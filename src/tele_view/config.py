@@ -26,6 +26,8 @@ class Config:
     translate_to: str | None
     # proxy for YouTube only, which blocks datacenter IPs; the Docker image turns "warp" into a local WARP tunnel
     youtube_proxy: str | None
+    # PO Token provider for YouTube (e.g. http://bgutil-provider:4416)
+    pot_provider_url: str | None
 
     @property
     def max_upload_bytes(self) -> int:
@@ -68,4 +70,5 @@ def load_config() -> Config:
         port=int(port) if (port := os.getenv("PORT")) else None,
         translate_to=os.getenv("TRANSLATE_TO", "vi") or None,
         youtube_proxy=youtube_proxy,
+        pot_provider_url=os.getenv("YT_POT_URL") or "http://127.0.0.1:4416",
     )

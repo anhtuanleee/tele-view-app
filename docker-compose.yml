@@ -2,9 +2,21 @@ services:
   bot:
     build: .
     env_file: .env
+    environment:
+      - YT_POT_URL=http://bgutil-provider:4416
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    depends_on:
+      - bgutil-provider
+
+  # Tự động giải mã PO Token (BotGuard) cho yt-dlp để tải YouTube không cần cookie
+  bgutil-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:4416:4416"
 
   # Optional: video tới 2GB. Bật bằng `docker compose --profile local up -d`
   # và đặt BOT_API_URL=http://telegram-bot-api:8081 trong .env

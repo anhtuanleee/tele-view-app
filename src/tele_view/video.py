@@ -107,6 +107,11 @@ def _ydl_opts(cfg: Config, workdir: Path, url: str) -> dict:
         opts["cookiesfrombrowser"] = (cfg.cookies_from_browser,)
     if cfg.youtube_proxy and is_youtube(url):
         opts["proxy"] = cfg.youtube_proxy
+    if is_youtube(url):
+        pot_url = cfg.pot_provider_url or "http://127.0.0.1:4416"
+        opts.setdefault("extractor_args", {})["youtubepot-bgutilhttp"] = {
+            "base_url": [pot_url]
+        }
     return opts
 
 

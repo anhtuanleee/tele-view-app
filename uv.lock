@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -225,6 +225,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/9a/8e/82a0fe20a541c03148528be8cac2408564a6c9a0cc7e9171802bc1d26985/attrs-26.1.0.tar.gz", hash = "sha256:d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32", size = 952055, upload-time = "2026-03-19T14:22:25.026Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl", hash = "sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309", size = 67548, upload-time = "2026-03-19T14:22:23.645Z" },
+]
+
+[[package]]
+name = "bgutil-ytdlp-pot-provider"
+version = "2.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/a4/b3cf2bf773009b9701f953bd62a6b585905ef498b37bd449767b5e9cd2ed/bgutil_ytdlp_pot_provider-2.0.2.tar.gz", hash = "sha256:a127b20c4757edb33f88061afb01220829d1b340638cf638a293065577a000b4", size = 12095, upload-time = "2026-10-07T17:22:06.685Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fa/ac/9da2e48eb58bbeb2c56739eed37c0e4c17b3c20c4c53a49c5a62c47a1148/bgutil_ytdlp_pot_provider-2.0.2-py3-none-any.whl", hash = "sha256:4f488008d25a715837df79472aad06ea052d20e14ad3a02609bbb0fbd746b8be", size = 12778, upload-time = "2026-10-07T17:22:05.578Z" },
 ]
 
 [[package]]
@@ -1111,6 +1120,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiogram" },
     { name = "aiohttp" },
+    { name = "bgutil-ytdlp-pot-provider" },
     { name = "curl-cffi" },
     { name = "httpx" },
     { name = "python-dotenv" },
@@ -1121,6 +1131,7 @@ dependencies = [
 requires-dist = [
     { name = "aiogram", specifier = ">=3.31.0" },
     { name = "aiohttp", specifier = ">=3.14.5" },
+    { name = "bgutil-ytdlp-pot-provider", specifier = ">=2.0.2" },
     { name = "curl-cffi", specifier = ">=0.16.3" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
