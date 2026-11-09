@@ -1,3 +1,4 @@
+import re
 from urllib.parse import urlparse
 
 from aiogram.types import Message
@@ -36,6 +37,7 @@ PHOTO_PATHS = {
     "tiktok": ("/photo/",),
 }
 VIDEO_HOSTS = ("fb.watch", "v.redd.it")
+YOUTUBE_HOSTS = ("youtube.com", "youtu.be")
 
 MAX_LINKS_PER_MESSAGE = 3
 
@@ -48,13 +50,25 @@ def _matches(host: str, domain: str) -> bool:
     return host == domain or host.endswith("." + domain)
 
 
+def is_youtube(url: str) -> bool:
+    return any(_matches(_host(url), d) for d in YOUTUBE_HOSTS)
+
+
+def normalize_url(url: str) -> str:
+    if is_youtube(url):
+        m = re.search(r"/shorts/([a-zA-Z0-9_-]+)", urlparse(url).path, re.I)
+        if m:
+            return f"https://www.youtube.com/shorts/{m.group(1)}"
+    return url
+
+
 def classify(url: str) -> str | None:
     """Return a platform key from VIDEO_PLATFORMS, or None for links that aren't from a social platform."""
     host = _host(url)
     if not host:
         return None
     # Telegram shows a player for regular YouTube links, but not for Shorts
-    if _matches(host, "youtube.com") and urlparse(url).path.startswith("/shorts/"):
+    if is_youtube(url) and "/shorts/" in urlparse(url).path.lower():
         return "youtube"
     for platform, domains in VIDEO_PLATFORMS.items():
         if any(_matches(host, d) for d in domains):
@@ -87,6 +101,7 @@ def extract_urls(message: Message) -> list[str]:
             continue
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
+        url = normalize_url(url)
         if url not in urls:
             urls.append(url)
     return urls[:MAX_LINKS_PER_MESSAGE]

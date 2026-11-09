@@ -24,6 +24,8 @@ class Config:
     port: int | None
     # language captions and titles are translated into; None turns translation off
     translate_to: str | None
+    # proxy for YouTube only, which blocks datacenter IPs; the Docker image turns "warp" into a local WARP tunnel
+    youtube_proxy: str | None
 
     @property
     def max_upload_bytes(self) -> int:
@@ -51,6 +53,10 @@ def load_config() -> Config:
             shutil.copyfile(cookies_file, writable)
         cookies_file = str(writable)
 
+    youtube_proxy = os.getenv("YOUTUBE_PROXY") or None
+    if youtube_proxy == "warp":
+        raise SystemExit("YOUTUBE_PROXY=warp chỉ chạy trong Docker; chạy ngoài Docker thì đặt địa chỉ proxy, vd socks5h://127.0.0.1:40000")
+
     return Config(
         bot_token=token,
         bot_api_url=os.getenv("BOT_API_URL") or None,
@@ -61,4 +67,5 @@ def load_config() -> Config:
         max_jobs=int(os.getenv("MAX_JOBS", "2")),
         port=int(port) if (port := os.getenv("PORT")) else None,
         translate_to=os.getenv("TRANSLATE_TO", "vi") or None,
+        youtube_proxy=youtube_proxy,
     )

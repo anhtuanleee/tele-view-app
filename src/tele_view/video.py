@@ -1,12 +1,15 @@
 import json
 import logging
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yt_dlp
 
 from .config import Config
+from .links import is_youtube
 
 log = logging.getLogger(__name__)
 
@@ -34,9 +37,11 @@ REASONS = [
     (("no video formats", "no video could be found", "there's no video", "no video in this post",
       "no media found", "cannot parse data"),
      "Bài này không có video.", True),
-    (("unsupported url",),
+    (("unsupported url", "playlist type is unviewable", "unviewable"),
      "Link này không có video hoặc chưa được hỗ trợ.", True),
-    (("http error 429", "too many requests", "rate-limit", "rate limit", "http error 403"),
+    # YouTube raises "failed to extract any player response" once it has blocked every player client
+    (("http error 429", "too many requests", "rate-limit", "rate limit", "http error 403",
+      "failed to extract any player response"),
      "Nền tảng đang tạm chặn bot. Thử lại sau ít phút.", False),
     (("removed", "deleted", "not available", "unavailable", "does not exist", "http error 404", "status code"),
      "Video đã bị xoá hoặc không còn tồn tại.", False),
@@ -70,10 +75,15 @@ class _YdlLogger:
     def debug(self, msg: str) -> None:
         log.debug(msg)
 
-    info = warning = error = debug
+    def warning(self, msg: str) -> None:
+        # YouTube's real failure reasons (bot checks, blocked clients) only show up as warnings
+        # before the generic "Failed to extract any player response"
+        log.warning(msg)
+
+    info = error = debug
 
 
-def _ydl_opts(cfg: Config, workdir: Path) -> dict:
+def _ydl_opts(cfg: Config, workdir: Path, url: str) -> dict:
     opts = {
         # bytes-capped: direct CDN links (e.g. from tikwm) get their whole query string as the id,
         # which overflows the 255-byte file name limit
@@ -85,16 +95,18 @@ def _ydl_opts(cfg: Config, workdir: Path) -> dict:
         "noplaylist": True,
         "playlist_items": "1",
         "quiet": True,
-        "no_warnings": True,
         "noprogress": True,
         "logger": _YdlLogger(),
         "socket_timeout": 30,
         "retries": 3,
+        "js_runtimes": {"deno": {}, "node": {}, "bun": {}},
     }
     if cfg.cookies_file:
         opts["cookiefile"] = cfg.cookies_file
     if cfg.cookies_from_browser:
         opts["cookiesfrombrowser"] = (cfg.cookies_from_browser,)
+    if cfg.youtube_proxy and is_youtube(url):
+        opts["proxy"] = cfg.youtube_proxy
     return opts
 
 
@@ -150,8 +162,10 @@ def _make_telegram_friendly(src: Path, max_bytes: int) -> Path:
 
 def download(url: str, cfg: Config, workdir: Path) -> Video:
     """Blocking: run via asyncio.to_thread."""
+    if is_youtube(url) and (m := re.search(r"/shorts/([a-zA-Z0-9_-]+)", urlparse(url).path, re.I)):
+        url = f"https://www.youtube.com/shorts/{m.group(1)}"
     try:
-        with yt_dlp.YoutubeDL(_ydl_opts(cfg, workdir)) as ydl:
+        with yt_dlp.YoutubeDL(_ydl_opts(cfg, workdir, url)) as ydl:
             info = ydl.extract_info(url, download=True)
     except yt_dlp.utils.DownloadError as e:
         log.warning("yt-dlp failed on %s: %s", url, e)
